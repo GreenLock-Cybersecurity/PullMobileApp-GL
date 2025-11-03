@@ -32,4 +32,18 @@ export const eventService = {
       };
     }
   },
+  createEvent: async (eventData) => {
+    try {
+      const response = await apiClient.post('/event/create-event', eventData);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to create event',
+      };
+    }
+  },
 };

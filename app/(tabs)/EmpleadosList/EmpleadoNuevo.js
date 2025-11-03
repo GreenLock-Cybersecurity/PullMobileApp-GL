@@ -1,5 +1,14 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,14 +17,15 @@ import { useDataStore } from '@/store/useDataStore';
 
 const employeeSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
-  lastName1: z.string().min(1, 'First last name is required'),
-  lastName2: z.string().min(1, 'Second last name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
+  dpi: z.string().length(13, 'DPI must be exactly 13 digits'),
 });
 
 export default function EmpleadoNuevo() {
   const router = useRouter();
   const addEmployee = useDataStore((state) => state.addEmployee);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     control,
@@ -25,36 +35,30 @@ export default function EmpleadoNuevo() {
     resolver: zodResolver(employeeSchema),
     defaultValues: {
       firstName: '',
-      lastName1: '',
-      lastName2: '',
+      lastName: '',
       email: '',
+      dpi: '',
     },
   });
 
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let password = '';
-    for (let i = 0; i < 8; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+  const onSubmit = async (data) => {
+    setIsSubmitting(true);
+
+    const result = await addEmployee(data);
+
+    setIsSubmitting(false);
+
+    if (result.success) {
+      Alert.alert(
+        'Employee Created',
+        `Employee created successfully!\n\nGenerated password: ${result.data.generatedPassword}\n\nPlease save this password and share it with the employee securely.`,
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } else {
+      Alert.alert('Error', result.error || 'Failed to create employee', [
+        { text: 'OK' },
+      ]);
     }
-    return password;
-  };
-
-  const onSubmit = (data) => {
-    const newEmployee = {
-      ...data,
-      password: generatePassword(),
-    };
-
-    addEmployee(newEmployee);
-    
-    Alert.alert(
-      'Employee Created',
-      `Employee created successfully!\n\nGenerated password: ${newEmployee.password}\n\nPlease save this password securely.`,
-      [
-        { text: 'OK', onPress: () => router.back() }
-      ]
-    );
   };
 
   return (
@@ -62,7 +66,9 @@ export default function EmpleadoNuevo() {
       <ScrollView className="flex-1 p-4" showsVerticalScrollIndicator={false}>
         <View className="space-y-4">
           <View>
-            <Text className="text-foreground text-sm font-medium mb-2">First Name</Text>
+            <Text className="text-foreground text-sm font-medium mb-2">
+              First Name
+            </Text>
             <Controller
               control={control}
               name="firstName"
@@ -77,52 +83,40 @@ export default function EmpleadoNuevo() {
               )}
             />
             {errors.firstName && (
-              <Text className="text-destructive text-sm mt-1">{errors.firstName.message}</Text>
+              <Text className="text-destructive text-sm mt-1">
+                {errors.firstName.message}
+              </Text>
             )}
           </View>
 
           <View>
-            <Text className="text-foreground text-sm font-medium mb-2">First Last Name</Text>
+            <Text className="text-foreground text-sm font-medium mb-2">
+              Last Name
+            </Text>
             <Controller
               control={control}
-              name="lastName1"
+              name="lastName"
               render={({ field }) => (
                 <TextInput
                   className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                  placeholder="Enter first last name"
+                  placeholder="Enter last name"
                   placeholderTextColor="#6b7280"
                   value={field.value}
                   onChangeText={field.onChange}
                 />
               )}
             />
-            {errors.lastName1 && (
-              <Text className="text-destructive text-sm mt-1">{errors.lastName1.message}</Text>
+            {errors.lastName && (
+              <Text className="text-destructive text-sm mt-1">
+                {errors.lastName.message}
+              </Text>
             )}
           </View>
 
           <View>
-            <Text className="text-foreground text-sm font-medium mb-2">Second Last Name</Text>
-            <Controller
-              control={control}
-              name="lastName2"
-              render={({ field }) => (
-                <TextInput
-                  className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                  placeholder="Enter second last name"
-                  placeholderTextColor="#6b7280"
-                  value={field.value}
-                  onChangeText={field.onChange}
-                />
-              )}
-            />
-            {errors.lastName2 && (
-              <Text className="text-destructive text-sm mt-1">{errors.lastName2.message}</Text>
-            )}
-          </View>
-
-          <View>
-            <Text className="text-foreground text-sm font-medium mb-2">Email</Text>
+            <Text className="text-foreground text-sm font-medium mb-2">
+              Email
+            </Text>
             <Controller
               control={control}
               name="email"
@@ -139,14 +133,54 @@ export default function EmpleadoNuevo() {
               )}
             />
             {errors.email && (
-              <Text className="text-destructive text-sm mt-1">{errors.email.message}</Text>
+              <Text className="text-destructive text-sm mt-1">
+                {errors.email.message}
+              </Text>
             )}
           </View>
 
-          <View className="bg-secondary rounded-lg p-4 mt-4">
-            <Text className="text-foreground text-sm font-medium mb-2">Password</Text>
+          <View>
+            <Text className="text-foreground text-sm font-medium mb-2">
+              DPI (13 digits)
+            </Text>
+            <Controller
+              control={control}
+              name="dpi"
+              render={({ field }) => (
+                <TextInput
+                  className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
+                  placeholder="Enter 13-digit DPI"
+                  placeholderTextColor="#6b7280"
+                  keyboardType="numeric"
+                  maxLength={13}
+                  value={field.value}
+                  onChangeText={field.onChange}
+                />
+              )}
+            />
+            {errors.dpi && (
+              <Text className="text-destructive text-sm mt-1">
+                {errors.dpi.message}
+              </Text>
+            )}
+          </View>
+
+          <View className="bg-secondary rounded-lg p-4 mt-4 border border-border">
+            <Text className="text-foreground text-sm font-medium mb-2">
+              Role
+            </Text>
             <Text className="text-muted-foreground text-sm">
-              A secure password will be automatically generated for this employee.
+              This employee will be created with "Staff" role by default.
+            </Text>
+          </View>
+
+          <View className="bg-secondary rounded-lg p-4 border border-border">
+            <Text className="text-foreground text-sm font-medium mb-2">
+              Password
+            </Text>
+            <Text className="text-muted-foreground text-sm">
+              A secure 12-character password will be automatically generated for
+              this employee.
             </Text>
           </View>
 
@@ -154,14 +188,24 @@ export default function EmpleadoNuevo() {
             <TouchableOpacity
               className="flex-1 bg-secondary border border-border rounded-lg py-3"
               onPress={() => router.back()}
+              disabled={isSubmitting}
             >
-              <Text className="text-foreground text-center font-medium">Cancel</Text>
+              <Text className="text-foreground text-center font-medium">
+                Cancel
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               className="flex-1 bg-primary rounded-lg py-3"
               onPress={handleSubmit(onSubmit)}
+              disabled={isSubmitting}
             >
-              <Text className="text-primary-foreground text-center font-medium">Create Employee</Text>
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-primary-foreground text-center font-medium">
+                  Create Employee
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>

@@ -1,134 +1,13 @@
 import { create } from 'zustand';
 import { eventService } from '@/services/eventService';
 import { bookingService } from '@/services/bookingService';
-
-const mockEvents = [
-  {
-    id: '1',
-    name: 'Jazz Night',
-    date: '2025-01-15',
-    startTime: '20:00',
-    endTime: '23:00',
-    description: 'An evening of smooth jazz',
-    accessType: 'public',
-    maxTickets: 100,
-    minAge: 18,
-    ticketsSold: 75,
-    poster:
-      'https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg?auto=compress&cs=tinysrgb&w=400',
-    ticketTypes: [
-      {
-        id: '1',
-        name: 'General',
-        description: 'General admission',
-        price: 25,
-        max: 80,
-        commission: 2.5,
-      },
-      {
-        id: '2',
-        name: 'VIP',
-        description: 'VIP access',
-        price: 50,
-        max: 20,
-        commission: 5,
-      },
-    ],
-  },
-  {
-    id: '2',
-    name: 'Electronic Beats',
-    date: '2025-01-18',
-    startTime: '22:00',
-    endTime: '04:00',
-    description: 'Electronic music festival',
-    accessType: 'public',
-    maxTickets: 200,
-    minAge: 21,
-    ticketsSold: 120,
-    poster:
-      'https://images.pexels.com/photos/1190298/pexels-photo-1190298.jpeg?auto=compress&cs=tinysrgb&w=400',
-    ticketTypes: [
-      {
-        id: '3',
-        name: 'Early Bird',
-        description: 'Early bird special',
-        price: 30,
-        max: 100,
-        commission: 3,
-      },
-      {
-        id: '4',
-        name: 'Regular',
-        description: 'Regular admission',
-        price: 40,
-        max: 100,
-        commission: 4,
-      },
-    ],
-  },
-];
-
-const mockReservations = [
-  {
-    id: '1',
-    customerName: 'John Doe',
-    date: '2025-01-15',
-    guests: 4,
-    status: 'Pending',
-    type: 'mesa',
-  },
-  {
-    id: '2',
-    customerName: 'Jane Smith',
-    date: '2025-01-15',
-    guests: 2,
-    status: 'Aceptada',
-    type: 'barra',
-  },
-  {
-    id: '3',
-    customerName: 'Bob Wilson',
-    date: '2025-01-16',
-    guests: 6,
-    status: 'Rechazada',
-    type: 'mesa',
-  },
-  {
-    id: '4',
-    customerName: 'Alice Brown',
-    date: '2025-01-16',
-    guests: 3,
-    status: 'Pending',
-    type: 'barra',
-  },
-];
-
-const mockEmployees = [
-  {
-    id: '1',
-    firstName: 'John',
-    lastName1: 'Doe',
-    lastName2: 'Smith',
-    email: 'john.doe@example.com',
-    password: 'generated123',
-  },
-  {
-    id: '2',
-    firstName: 'Jane',
-    lastName1: 'Wilson',
-    lastName2: 'Brown',
-    email: 'jane.wilson@example.com',
-    password: 'generated456',
-  },
-];
+import { employeeService } from '@/services/employeeService';
 
 export const useDataStore = create((set, get) => ({
   events: [],
   isLoadingEvents: false,
   eventsError: null,
 
-  // Estados para bookings
   bookings: [],
   isLoadingBookings: false,
   bookingsError: null,
@@ -145,7 +24,9 @@ export const useDataStore = create((set, get) => ({
   bookingDetailError: null,
   currentBookingModifications: null,
 
-  employees: mockEmployees,
+  employees: [],
+  isLoadingEmployees: false,
+  employeesError: null,
 
   fetchUpcomingEvents: async (venueId) => {
     if (!venueId) {
@@ -159,7 +40,6 @@ export const useDataStore = create((set, get) => ({
       const result = await eventService.getUpcomingEvents(venueId);
 
       if (result.success) {
-        // Mapear los datos del API al formato que espera tu componente
         const mappedEvents = result.data.map((event) => ({
           id: event.id,
           name: event.name,
@@ -226,7 +106,6 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
-  // Limpiar evento actual (útil al salir de la pantalla)
   clearCurrentEvent: () => {
     set({
       currentEvent: null,
@@ -235,13 +114,22 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  addEvent: (event) =>
-    set((state) => ({
-      events: [
-        ...state.events,
-        { ...event, id: Date.now().toString(), ticketsSold: 0 },
-      ],
-    })),
+  addEvent: async (eventData) => {
+    try {
+      const result = await eventService.createEvent(eventData);
+
+      if (result.success) {
+        set((state) => ({
+          events: [result.data, ...state.events],
+        }));
+        return { success: true, data: result.data };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Failed to create event' };
+    }
+  },
 
   fetchBookings: async (venueId, options = {}) => {
     const { status = 'All', page = 1, resetList = false } = options;
@@ -300,7 +188,6 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
-  // Cargar más bookings (siguiente página)
   loadMoreBookings: async (venueId) => {
     const { bookingsPagination, currentBookingFilter } = get();
 
@@ -315,7 +202,6 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  // Cambiar filtro de estado
   changeBookingFilter: async (venueId, newStatus) => {
     await get().fetchBookings(venueId, {
       status: newStatus,
@@ -324,7 +210,6 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  // Limpiar bookings
   clearBookings: () => {
     set({
       bookings: [],
@@ -485,25 +370,97 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
-  addEmployee: (employee) =>
-    set((state) => ({
-      employees: [
-        ...state.employees,
-        { ...employee, id: Date.now().toString() },
-      ],
-    })),
+  fetchEmployees: async () => {
+    set({ isLoadingEmployees: true, employeesError: null });
 
-  updateEmployee: (id, updatedEmployee) =>
-    set((state) => ({
-      employees: state.employees.map((emp) =>
-        emp.id === id ? { ...emp, ...updatedEmployee } : emp
-      ),
-    })),
+    try {
+      const result = await employeeService.getEmployees();
 
-  deleteEmployee: (id) =>
-    set((state) => ({
-      employees: state.employees.filter((emp) => emp.id !== id),
-    })),
+      if (result.success) {
+        set({
+          employees: result.data,
+          isLoadingEmployees: false,
+          employeesError: null,
+        });
+
+        return { success: true, data: result.data };
+      } else {
+        set({
+          employees: [],
+          isLoadingEmployees: false,
+          employeesError: result.error,
+        });
+
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      set({
+        employees: [],
+        isLoadingEmployees: false,
+        employeesError: 'Failed to fetch employees',
+      });
+
+      return { success: false, error: 'Failed to fetch employees' };
+    }
+  },
+
+  clearEmployees: () => set({ employees: [], employeesError: null }),
+
+  addEmployee: async (employeeData) => {
+    try {
+      const result = await employeeService.createEmployee(employeeData);
+
+      if (result.success) {
+        set((state) => ({
+          employees: [result.data, ...state.employees],
+        }));
+        return { success: true, data: result.data };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Failed to create employee' };
+    }
+  },
+
+  updateEmployee: async (employeeId, employeeData) => {
+    try {
+      const result = await employeeService.updateEmployee(
+        employeeId,
+        employeeData
+      );
+
+      if (result.success) {
+        set((state) => ({
+          employees: state.employees.map((emp) =>
+            emp.id === employeeId ? { ...emp, ...result.data } : emp
+          ),
+        }));
+
+        return { success: true, data: result.data };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Failed to update employee' };
+    }
+  },
+
+  deleteEmployee: async (employeeId) => {
+    try {
+      const result = await employeeService.deleteEmployee(employeeId);
+      if (result.success) {
+        set((state) => ({
+          employees: state.employees.filter((emp) => emp.id !== employeeId),
+        }));
+        return { success: true, message: result.message };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Failed to delete employee' };
+    }
+  },
 
   updateReservationStatus: (id, status) =>
     set((state) => ({

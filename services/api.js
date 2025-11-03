@@ -1,20 +1,34 @@
 import axios from 'axios';
-import { API_URL } from '@env';
 
 export const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: process.env.API_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
+apiClient.interceptors.request.use(
+  async (config) => {
+    const { useAuthStore } = await import('@/store/useAuthStore');
+    const token = useAuthStore.getState().token;
+
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // Manejar token expirado
     if (
       error.response?.status === 403 &&
       error.response?.data?.code === 'INVALID_TOKEN' &&

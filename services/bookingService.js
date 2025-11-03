@@ -1,4 +1,3 @@
-// services/bookingService.js
 import { apiClient } from './api';
 
 export const bookingService = {

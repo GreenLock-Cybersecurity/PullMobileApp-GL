@@ -1,4 +1,3 @@
-// services/authService.js
 import { apiClient } from './api';
 
 export const authService = {
