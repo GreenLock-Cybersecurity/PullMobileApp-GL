@@ -1,13 +1,31 @@
+// store/useDataStore.js - COMPLETO con deleteEvent
 import { create } from 'zustand';
 import { eventService } from '@/services/eventService';
+import { venueService } from '@/services/venueService';
 import { bookingService } from '@/services/bookingService';
 import { employeeService } from '@/services/employeeService';
 
 export const useDataStore = create((set, get) => ({
+  // Venue info
+  venueInfo: null,
+  isLoadingVenue: false,
+  venueError: null,
+
+  // Events
   events: [],
   isLoadingEvents: false,
   eventsError: null,
+  currentEvent: null,
+  isLoadingEventDetail: false,
+  eventDetailError: null,
+  isCreatingEvent: false,
+  createEventError: null,
+  isUpdatingEvent: false,
+  updateEventError: null,
+  isDeletingEvent: false,
+  deleteEventError: null,
 
+  // Bookings
   bookings: [],
   isLoadingBookings: false,
   bookingsError: null,
@@ -24,9 +42,44 @@ export const useDataStore = create((set, get) => ({
   bookingDetailError: null,
   currentBookingModifications: null,
 
+  // Employees
   employees: [],
   isLoadingEmployees: false,
   employeesError: null,
+
+  fetchVenueInfo: async (venueId) => {
+    if (!venueId) {
+      set({ venueError: 'Venue ID is required' });
+      return;
+    }
+
+    set({ isLoadingVenue: true, venueError: null });
+
+    try {
+      const result = await venueService.getVenueInfo(venueId);
+
+      if (result.success) {
+        set({
+          venueInfo: result.data,
+          isLoadingVenue: false,
+          venueError: null,
+        });
+      } else {
+        set({
+          venueInfo: null,
+          isLoadingVenue: false,
+          venueError: result.error,
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching venue info:', error);
+      set({
+        venueInfo: null,
+        isLoadingVenue: false,
+        venueError: 'Failed to load venue info',
+      });
+    }
+  },
 
   fetchUpcomingEvents: async (venueId) => {
     if (!venueId) {
@@ -39,18 +92,29 @@ export const useDataStore = create((set, get) => ({
     try {
       const result = await eventService.getUpcomingEvents(venueId);
 
-      if (result.success) {
+      console.log('📦 Full result:', result);
+
+      if (result.success && result.data && Array.isArray(result.data)) {
         const mappedEvents = result.data.map((event) => ({
-          id: event.id,
-          name: event.name,
-          date: event.event_date,
+          id: event.event_id || event.id,
+          name: event.event_name || event.name,
+          date: event.event_date || event.date,
           startTime: event.start_time,
           endTime: event.end_time,
-          poster: event.image,
-          ticketsSold: event.tickets_sold,
-          maxTickets: event.ticket_limit,
+          poster: event.event_img || event.image || event.poster,
+          slug: event.event_slug || event.slug,
+          ticketsSold: event.tickets_sold || 0,
+          maxTickets: event.ticket_limit || event.max_tickets,
           ticketsAvailable: event.tickets_available,
+          description: event.description || '',
+          minAge: event.min_age || 18,
+          minPrice: event.min_price,
+          dressCode: event.dress_code || '',
+          accessType: event.access_type || '',
+          customLocation: event.custom_location || '',
         }));
+
+        console.log('✅ Mapped events:', mappedEvents);
 
         set({
           events: mappedEvents,
@@ -58,17 +122,19 @@ export const useDataStore = create((set, get) => ({
           eventsError: null,
         });
       } else {
+        console.log('❌ Invalid result structure');
         set({
           events: [],
           isLoadingEvents: false,
-          eventsError: result.error,
+          eventsError: result.error || 'No events found',
         });
       }
     } catch (error) {
+      console.error('❌ Error fetching events:', error);
       set({
         events: [],
         isLoadingEvents: false,
-        eventsError: 'Network error. Please try again.',
+        eventsError: 'Failed to load events. Please try again.',
       });
     }
   },
@@ -114,20 +180,102 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  addEvent: async (eventData) => {
+  clearVenueInfo: () => {
+    set({
+      venueInfo: null,
+      isLoadingVenue: false,
+      venueError: null,
+    });
+  },
+
+  createEvent: async (eventData) => {
+    set({ isCreatingEvent: true, createEventError: null });
+
     try {
       const result = await eventService.createEvent(eventData);
 
       if (result.success) {
-        set((state) => ({
-          events: [result.data, ...state.events],
-        }));
+        set({
+          isCreatingEvent: false,
+          createEventError: null,
+        });
         return { success: true, data: result.data };
       } else {
+        set({
+          isCreatingEvent: false,
+          createEventError: result.error,
+        });
         return { success: false, error: result.error };
       }
     } catch (error) {
+      set({
+        isCreatingEvent: false,
+        createEventError: 'Failed to create event',
+      });
       return { success: false, error: 'Failed to create event' };
+    }
+  },
+
+  updateEvent: async (eventId, eventData) => {
+    set({ isUpdatingEvent: true, updateEventError: null });
+
+    try {
+      const result = await eventService.updateEvent(eventId, eventData);
+
+      if (result.success) {
+        set({
+          isUpdatingEvent: false,
+          updateEventError: null,
+        });
+        return { success: true, data: result.data };
+      } else {
+        set({
+          isUpdatingEvent: false,
+          updateEventError: result.error,
+        });
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      set({
+        isUpdatingEvent: false,
+        updateEventError: 'Failed to update event',
+      });
+      return { success: false, error: 'Failed to update event' };
+    }
+  },
+
+  // NUEVA FUNCIÓN deleteEvent
+  deleteEvent: async (eventId) => {
+    set({ isDeletingEvent: true, deleteEventError: null });
+
+    try {
+      const result = await eventService.deleteEvent(eventId);
+
+      if (result.success) {
+        // Eliminar el evento de la lista local
+        const currentEvents = get().events;
+        const updatedEvents = currentEvents.filter(event => event.id !== eventId);
+        
+        set({
+          events: updatedEvents,
+          isDeletingEvent: false,
+          deleteEventError: null,
+        });
+        
+        return { success: true, data: result.data };
+      } else {
+        set({
+          isDeletingEvent: false,
+          deleteEventError: result.error,
+        });
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      set({
+        isDeletingEvent: false,
+        deleteEventError: 'Failed to delete event',
+      });
+      return { success: false, error: 'Failed to delete event' };
     }
   },
 
@@ -139,7 +287,6 @@ export const useDataStore = create((set, get) => ({
       return;
     }
 
-    // Si es la primera página o cambiamos filtro, mostrar loading completo
     if (page === 1 || resetList) {
       set({
         isLoadingBookings: true,
@@ -157,13 +304,7 @@ export const useDataStore = create((set, get) => ({
 
       if (result.success) {
         const currentBookings = get().bookings;
-
-        // Si es reset o primera página, reemplazar lista
-        // Si es "load more", agregar a la lista existente
-        const newBookings =
-          page === 1 || resetList
-            ? result.data
-            : [...currentBookings, ...result.data];
+        const newBookings = page === 1 || resetList ? result.data : [...currentBookings, ...result.data];
 
         set({
           bookings: newBookings,
@@ -190,11 +331,7 @@ export const useDataStore = create((set, get) => ({
 
   loadMoreBookings: async (venueId) => {
     const { bookingsPagination, currentBookingFilter } = get();
-
-    if (!bookingsPagination.hasMore) {
-      return;
-    }
-
+    if (!bookingsPagination.hasMore) return;
     await get().fetchBookings(venueId, {
       status: currentBookingFilter,
       page: bookingsPagination.currentPage + 1,
@@ -236,7 +373,6 @@ export const useDataStore = create((set, get) => ({
 
     try {
       const result = await bookingService.getBookingDetails(bookingId);
-
       if (result.success) {
         set({
           currentBooking: result.data,
@@ -265,55 +401,6 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
-  processBookingModifications: async (
-    bookingId,
-    action,
-    venueId,
-    organizationId,
-    employeeId
-  ) => {
-    try {
-      const result = await bookingService.processModifications(
-        bookingId,
-        action,
-        venueId,
-        organizationId,
-        employeeId
-      );
-
-      if (result.success) {
-        // Actualizar estado local - cambiar a confirmed y limpiar modificaciones
-        const currentBookings = get().bookings;
-        const updatedBookings = currentBookings.map((booking) =>
-          booking.id === bookingId
-            ? { ...booking, status: 'confirmed' }
-            : booking
-        );
-
-        const currentBooking = get().currentBooking;
-        const updatedCurrentBooking =
-          currentBooking?.id === bookingId
-            ? { ...currentBooking, status: 'confirmed' }
-            : currentBooking;
-
-        set({
-          bookings: updatedBookings,
-          currentBooking: updatedCurrentBooking,
-          currentBookingModifications: null,
-        });
-
-        return {
-          success: true,
-          message: result.message,
-        };
-      } else {
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
-    }
-  },
-
   clearCurrentBooking: () => {
     set({
       currentBooking: null,
@@ -323,66 +410,16 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  updateBookingStatus: async (
-    bookingId,
-    newStatus,
-    venueId,
-    organizationId,
-    employeeId
-  ) => {
-    try {
-      const result = await bookingService.updateBookingStatus(
-        bookingId,
-        newStatus,
-        venueId,
-        organizationId,
-        employeeId
-      );
-
-      if (result.success) {
-        // Actualizar solo el estado en la lista local
-        const currentBookings = get().bookings;
-        const updatedBookings = currentBookings.map((booking) =>
-          booking.id === bookingId ? { ...booking, status: newStatus } : booking
-        );
-
-        // Actualizar el booking actual si es el mismo
-        const currentBooking = get().currentBooking;
-        const updatedCurrentBooking =
-          currentBooking?.id === bookingId
-            ? { ...currentBooking, status: newStatus }
-            : currentBooking;
-
-        set({
-          bookings: updatedBookings,
-          currentBooking: updatedCurrentBooking,
-        });
-
-        return {
-          success: true,
-          message: result.message,
-        };
-      } else {
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
-    }
-  },
-
   fetchEmployees: async () => {
     set({ isLoadingEmployees: true, employeesError: null });
-
     try {
       const result = await employeeService.getEmployees();
-
       if (result.success) {
         set({
           employees: result.data,
           isLoadingEmployees: false,
           employeesError: null,
         });
-
         return { success: true, data: result.data };
       } else {
         set({
@@ -390,7 +427,6 @@ export const useDataStore = create((set, get) => ({
           isLoadingEmployees: false,
           employeesError: result.error,
         });
-
         return { success: false, error: result.error };
       }
     } catch (error) {
@@ -399,73 +435,9 @@ export const useDataStore = create((set, get) => ({
         isLoadingEmployees: false,
         employeesError: 'Failed to fetch employees',
       });
-
       return { success: false, error: 'Failed to fetch employees' };
     }
   },
 
   clearEmployees: () => set({ employees: [], employeesError: null }),
-
-  addEmployee: async (employeeData) => {
-    try {
-      const result = await employeeService.createEmployee(employeeData);
-
-      if (result.success) {
-        set((state) => ({
-          employees: [result.data, ...state.employees],
-        }));
-        return { success: true, data: result.data };
-      } else {
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      return { success: false, error: 'Failed to create employee' };
-    }
-  },
-
-  updateEmployee: async (employeeId, employeeData) => {
-    try {
-      const result = await employeeService.updateEmployee(
-        employeeId,
-        employeeData
-      );
-
-      if (result.success) {
-        set((state) => ({
-          employees: state.employees.map((emp) =>
-            emp.id === employeeId ? { ...emp, ...result.data } : emp
-          ),
-        }));
-
-        return { success: true, data: result.data };
-      } else {
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      return { success: false, error: 'Failed to update employee' };
-    }
-  },
-
-  deleteEmployee: async (employeeId) => {
-    try {
-      const result = await employeeService.deleteEmployee(employeeId);
-      if (result.success) {
-        set((state) => ({
-          employees: state.employees.filter((emp) => emp.id !== employeeId),
-        }));
-        return { success: true, message: result.message };
-      } else {
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      return { success: false, error: 'Failed to delete employee' };
-    }
-  },
-
-  updateReservationStatus: (id, status) =>
-    set((state) => ({
-      reservations: state.reservations.map((reservation) =>
-        reservation.id === id ? { ...reservation, status } : reservation
-      ),
-    })),
 }));

@@ -1,8 +1,16 @@
+// api.js
 import axios from 'axios';
+import Constants from 'expo-constants';
+
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 
+                process.env.EXPO_PUBLIC_API_URL || 
+                'http://localhost:8080/api/v1';
+
+console.log('🌐 API URL:', API_URL);
 
 export const apiClient = axios.create({
-  baseURL: process.env.API_URL,
-  timeout: 10000,
+  baseURL: API_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -10,6 +18,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   async (config) => {
+    console.log(`📤 ${config.method?.toUpperCase()} ${config.url}`);
     const { useAuthStore } = await import('@/store/useAuthStore');
     const token = useAuthStore.getState().token;
 
@@ -20,13 +29,19 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
+    console.error('❌ Request error:', error);
     return Promise.reject(error);
   }
 );
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    return response;
+  },
   async (error) => {
+    console.error('❌ Response error:', error.response?.status, error.response?.data);
+    
     const originalRequest = error.config;
 
     if (

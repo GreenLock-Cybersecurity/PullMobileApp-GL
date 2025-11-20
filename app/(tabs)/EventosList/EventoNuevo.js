@@ -1,436 +1,480 @@
-import { useState, useRef } from 'react';
+// app/(tabs)/EventosList/EventoNuevo.js - COMPLETO
+import { useState } from 'react';
 import {
   View,
   Text,
+  SafeAreaView,
+  ScrollView,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
+  ImageBackground,
+  StyleSheet,
   Alert,
+  ActivityIndicator,
+  Switch,
   KeyboardAvoidingView,
   Platform,
-  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useForm, Controller, useFieldArray } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useDataStore } from '@/store/useDataStore';
-
-const ticketTypeSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string(),
-  price: z.number().min(0, 'Price must be positive'),
-  max: z.number().min(1, 'Max must be at least 1'),
-  commission: z.number().min(0, 'Commission must be positive'),
-});
-
-const eventSchema = z.object({
-  name: z.string().min(1, 'Event name is required'),
-  date: z.string().min(1, 'Date is required'),
-  startTime: z.string().min(1, 'Start time is required'),
-  endTime: z.string().min(1, 'End time is required'),
-  description: z.string().min(1, 'Description is required'),
-  accessType: z.enum(['public', 'private']),
-  maxTickets: z.number().min(1, 'Max tickets must be at least 1'),
-  minAge: z.number().min(0, 'Min age must be positive'),
-  ticketTypes: z
-    .array(ticketTypeSchema)
-    .min(1, 'At least one ticket type is required'),
-});
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function EventoNuevo() {
   const router = useRouter();
-  const addEvent = useDataStore((state) => state.addEvent);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const scrollViewRef = useRef(null);
+  const { createEvent, isCreatingEvent } = useDataStore();
 
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm({
-    resolver: zodResolver(eventSchema),
-    defaultValues: {
-      name: '',
-      date: '',
-      startTime: '20:00',
-      endTime: '06:00',
-      description: '',
-      accessType: 'public',
-      maxTickets: 100,
-      minAge: 18,
-      ticketTypes: [
-        {
-          name: 'General',
-          description: 'General admission',
-          price: 25,
-          max: 80,
-          commission: 2.5,
-        },
-      ],
-    },
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    image: '',
+    event_date: '',
+    start_time: '',
+    end_time: '',
+    ticket_limit: '',
+    dress_code: '',
+    min_age: '18',
+    vip_enabled: false,
+    custom_location: '',
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: 'ticketTypes',
-  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
-  const onSubmit = async (data) => {
-    Keyboard.dismiss();
-    console.log('📤 Submitting event data:', data);
-    setIsSubmitting(true);
-
-    const result = await addEvent(data);
-
-    console.log('📤 Result from addEvent:', result);
-    setIsSubmitting(false);
-
-    if (result.success) {
-      Alert.alert('Success', 'Event created successfully', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
-    } else {
-      Alert.alert(
-        'Error',
-        result.error || 'Failed to create event. Please try again.',
-        [{ text: 'OK' }]
-      );
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const formatted = selectedDate.toISOString().split('T')[0];
+      setFormData({ ...formData, event_date: formatted });
     }
   };
 
-  const addTicketType = () => {
-    if (fields.length < 4) {
-      append({ name: '', description: '', price: 0, max: 0, commission: 0 });
+  const handleStartTimeChange = (event, selectedTime) => {
+    setShowStartTimePicker(false);
+    if (selectedTime) {
+      const hours = selectedTime.getHours().toString().padStart(2, '0');
+      const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
+      setFormData({ ...formData, start_time: `${hours}:${minutes}:00` });
+    }
+  };
+
+  const handleEndTimeChange = (event, selectedTime) => {
+    setShowEndTimePicker(false);
+    if (selectedTime) {
+      const hours = selectedTime.getHours().toString().padStart(2, '0');
+      const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
+      setFormData({ ...formData, end_time: `${hours}:${minutes}:00` });
+    }
+  };
+
+  const handleSubmit = async () => {
+    // Validación
+    if (!formData.name || !formData.event_date || !formData.start_time || !formData.end_time) {
+      Alert.alert('Error', 'Please fill in all required fields (Name, Date, Start Time, End Time)');
+      return;
+    }
+
+    const result = await createEvent({
+      name: formData.name,
+      description: formData.description,
+      image: formData.image,
+      event_date: formData.event_date,
+      start_time: formData.start_time,
+      end_time: formData.end_time,
+      ticket_limit: formData.ticket_limit ? parseInt(formData.ticket_limit) : 0,
+      dress_code: formData.dress_code,
+      min_age: formData.min_age ? parseInt(formData.min_age) : 18,
+      vip_enabled: formData.vip_enabled,
+      custom_location: formData.custom_location,
+    });
+
+    if (result.success) {
+      Alert.alert('Success', 'Event created successfully', [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+        },
+      ]);
+    } else {
+      Alert.alert('Error', result.error || 'Failed to create event');
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <ScrollView
-          ref={scrollViewRef}
-          className="flex-1"
-          contentContainerStyle={{ padding: 16 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+    <ImageBackground
+      source={require('../../../assets/fondo.png')}
+      style={styles.background}
+      blurRadius={24}
+    >
+      <View style={styles.overlay} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
-          <View className="space-y-4 pb-8">
-            <View>
-              <Text className="text-foreground text-sm font-medium mb-2">
-                Event Name
-              </Text>
-              <Controller
-                control={control}
-                name="name"
-                render={({ field }) => (
-                  <TextInput
-                    className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                    placeholder="Enter event name"
-                    placeholderTextColor="#6b7280"
-                    value={field.value}
-                    onChangeText={field.onChange}
-                  />
-                )}
-              />
-              {errors.name && (
-                <Text className="text-destructive text-sm mt-1">
-                  {errors.name.message}
-                </Text>
-              )}
+          <View style={styles.container}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.backButton}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="arrow-back" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Create New Event</Text>
+              <View style={{ width: 40 }} />
             </View>
 
-            <View className="flex-row space-x-4">
-              <View className="flex-1">
-                <Text className="text-foreground text-sm font-medium mb-2">
-                  Date
-                </Text>
-                <Controller
-                  control={control}
-                  name="date"
-                  render={({ field }) => (
-                    <TextInput
-                      className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#6b7280"
-                      value={field.value}
-                      onChangeText={field.onChange}
-                    />
-                  )}
-                />
-                {errors.date && (
-                  <Text className="text-destructive text-sm mt-1">
-                    {errors.date.message}
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            <View className="flex-row space-x-4">
-              <View className="flex-1">
-                <Text className="text-foreground text-sm font-medium mb-2">
-                  Start Time
-                </Text>
-                <Controller
-                  control={control}
-                  name="startTime"
-                  render={({ field }) => (
-                    <TextInput
-                      className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                      placeholder="HH:MM"
-                      placeholderTextColor="#6b7280"
-                      value={field.value}
-                      onChangeText={field.onChange}
-                    />
-                  )}
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-foreground text-sm font-medium mb-2">
-                  End Time
-                </Text>
-                <Controller
-                  control={control}
-                  name="endTime"
-                  render={({ field }) => (
-                    <TextInput
-                      className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                      placeholder="HH:MM"
-                      placeholderTextColor="#6b7280"
-                      value={field.value}
-                      onChangeText={field.onChange}
-                    />
-                  )}
-                />
-              </View>
-            </View>
-
-            <View>
-              <Text className="text-foreground text-sm font-medium mb-2">
-                Description
-              </Text>
-              <Controller
-                control={control}
-                name="description"
-                render={({ field }) => (
-                  <TextInput
-                    className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground min-h-[100px]"
-                    placeholder="Event description"
-                    placeholderTextColor="#6b7280"
-                    multiline
-                    textAlignVertical="top"
-                    value={field.value}
-                    onChangeText={field.onChange}
-                    style={{ maxHeight: 200 }}
-                  />
-                )}
-              />
-            </View>
-
-            <View className="flex-row space-x-4">
-              <View className="flex-1">
-                <Text className="text-foreground text-sm font-medium mb-2">
-                  Max Tickets
-                </Text>
-                <Controller
-                  control={control}
-                  name="maxTickets"
-                  render={({ field }) => (
-                    <TextInput
-                      className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                      placeholder="100"
-                      placeholderTextColor="#6b7280"
-                      keyboardType="numeric"
-                      value={field.value?.toString()}
-                      onChangeText={(text) =>
-                        field.onChange(parseInt(text) || 0)
-                      }
-                    />
-                  )}
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-foreground text-sm font-medium mb-2">
-                  Min Age
-                </Text>
-                <Controller
-                  control={control}
-                  name="minAge"
-                  render={({ field }) => (
-                    <TextInput
-                      className="bg-secondary border border-border rounded-lg px-4 py-3 text-foreground"
-                      placeholder="18"
-                      placeholderTextColor="#6b7280"
-                      keyboardType="numeric"
-                      value={field.value?.toString()}
-                      onChangeText={(text) =>
-                        field.onChange(parseInt(text) || 0)
-                      }
-                    />
-                  )}
-                />
-              </View>
-            </View>
-
-            <View>
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-foreground text-lg font-semibold">
-                  Ticket Types
-                </Text>
-                {fields.length < 4 && (
-                  <TouchableOpacity
-                    className="bg-primary rounded-lg px-3 py-1"
-                    onPress={addTicketType}
-                  >
-                    <Text className="text-primary-foreground text-sm">
-                      Add Type
+            {/* Form */}
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <BlurView intensity={80} tint="dark" style={styles.formCard}>
+                <View style={styles.formCardInner}>
+                  {/* Event Name */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>
+                      Event Name <Text style={styles.required}>*</Text>
                     </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name}
+                      onChangeText={(text) => setFormData({ ...formData, name: text })}
+                      placeholder="e.g., Summer Night Party"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    />
+                  </View>
 
-              {fields.map((field, index) => (
-                <View
-                  key={field.id}
-                  className="bg-secondary rounded-lg p-4 mb-4 border border-border"
-                >
-                  <View className="flex-row justify-between items-center mb-3">
-                    <Text className="text-foreground font-medium">
-                      Ticket Type #{index + 1}
+                  {/* Description */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Description</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={formData.description}
+                      onChangeText={(text) => setFormData({ ...formData, description: text })}
+                      placeholder="Enter event description..."
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                      multiline
+                      numberOfLines={4}
+                    />
+                  </View>
+
+                  {/* Image URL */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Event Image URL</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.image}
+                      onChangeText={(text) => setFormData({ ...formData, image: text })}
+                      placeholder="https://example.com/event-image.jpg"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                      autoCapitalize="none"
+                      keyboardType="url"
+                    />
+                  </View>
+
+                  {/* Event Date */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>
+                      Event Date <Text style={styles.required}>*</Text>
                     </Text>
-                    {fields.length > 1 && (
-                      <TouchableOpacity
-                        onPress={() => remove(index)}
-                        className="bg-destructive rounded-full w-6 h-6 items-center justify-center"
-                      >
-                        <Text className="text-destructive-foreground text-sm">
-                          ×
-                        </Text>
-                      </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.dateButton}
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <Text style={styles.dateButtonText}>
+                        {formData.event_date || 'Select date'}
+                      </Text>
+                      <Ionicons name="calendar-outline" size={20} color="rgba(139, 92, 246, 0.9)" />
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={formData.event_date ? new Date(formData.event_date) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={handleDateChange}
+                        minimumDate={new Date()}
+                      />
                     )}
                   </View>
 
-                  <View className="space-y-3">
-                    <Controller
-                      control={control}
-                      name={`ticketTypes.${index}.name`}
-                      render={({ field }) => (
-                        <TextInput
-                          className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
-                          placeholder="Ticket name"
-                          placeholderTextColor="#6b7280"
-                          value={field.value}
-                          onChangeText={field.onChange}
+                  {/* Time Section */}
+                  <View style={styles.timeRow}>
+                    {/* Start Time */}
+                    <View style={[styles.formGroup, { flex: 1 }]}>
+                      <Text style={styles.label}>
+                        Start Time <Text style={styles.required}>*</Text>
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => setShowStartTimePicker(true)}
+                      >
+                        <Text style={styles.dateButtonText}>
+                          {formData.start_time ? formData.start_time.slice(0, 5) : 'Start'}
+                        </Text>
+                        <Ionicons name="time-outline" size={20} color="rgba(34, 211, 238, 0.9)" />
+                      </TouchableOpacity>
+                      {showStartTimePicker && (
+                        <DateTimePicker
+                          value={new Date()}
+                          mode="time"
+                          display="default"
+                          onChange={handleStartTimeChange}
                         />
                       )}
-                    />
+                    </View>
 
-                    <Controller
-                      control={control}
-                      name={`ticketTypes.${index}.description`}
-                      render={({ field }) => (
-                        <TextInput
-                          className="bg-background border border-border rounded-lg px-3 py-2 text-foreground min-h-[60px]"
-                          placeholder="Description"
-                          placeholderTextColor="#6b7280"
-                          multiline
-                          textAlignVertical="top"
-                          value={field.value}
-                          onChangeText={field.onChange}
-                          style={{ maxHeight: 120 }}
+                    {/* End Time */}
+                    <View style={[styles.formGroup, { flex: 1 }]}>
+                      <Text style={styles.label}>
+                        End Time <Text style={styles.required}>*</Text>
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => setShowEndTimePicker(true)}
+                      >
+                        <Text style={styles.dateButtonText}>
+                          {formData.end_time ? formData.end_time.slice(0, 5) : 'End'}
+                        </Text>
+                        <Ionicons name="time-outline" size={20} color="rgba(34, 211, 238, 0.9)" />
+                      </TouchableOpacity>
+                      {showEndTimePicker && (
+                        <DateTimePicker
+                          value={new Date()}
+                          mode="time"
+                          display="default"
+                          onChange={handleEndTimeChange}
                         />
                       )}
-                    />
-
-                    <View className="flex-row space-x-3">
-                      <View className="flex-1">
-                        <Controller
-                          control={control}
-                          name={`ticketTypes.${index}.price`}
-                          render={({ field }) => (
-                            <TextInput
-                              className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
-                              placeholder="Price"
-                              placeholderTextColor="#6b7280"
-                              keyboardType="numeric"
-                              value={field.value?.toString()}
-                              onChangeText={(text) =>
-                                field.onChange(parseFloat(text) || 0)
-                              }
-                            />
-                          )}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Controller
-                          control={control}
-                          name={`ticketTypes.${index}.max`}
-                          render={({ field }) => (
-                            <TextInput
-                              className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
-                              placeholder="Max"
-                              placeholderTextColor="#6b7280"
-                              keyboardType="numeric"
-                              value={field.value?.toString()}
-                              onChangeText={(text) =>
-                                field.onChange(parseInt(text) || 0)
-                              }
-                            />
-                          )}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Controller
-                          control={control}
-                          name={`ticketTypes.${index}.commission`}
-                          render={({ field }) => (
-                            <TextInput
-                              className="bg-background border border-border rounded-lg px-3 py-2 text-foreground"
-                              placeholder="Commission"
-                              placeholderTextColor="#6b7280"
-                              keyboardType="numeric"
-                              value={field.value?.toString()}
-                              onChangeText={(text) =>
-                                field.onChange(parseFloat(text) || 0)
-                              }
-                            />
-                          )}
-                        />
-                      </View>
                     </View>
                   </View>
-                </View>
-              ))}
-            </View>
 
-            <View className="flex-row space-x-4 mt-6">
-              <TouchableOpacity
-                className="flex-1 bg-secondary border border-border rounded-lg py-3"
-                onPress={() => router.back()}
-                disabled={isSubmitting}
-              >
-                <Text className="text-foreground text-center font-medium">
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="flex-1 bg-primary rounded-lg py-3"
-                onPress={handleSubmit(onSubmit)}
-                disabled={isSubmitting}
-              >
-                <Text className="text-primary-foreground text-center font-medium">
-                  {isSubmitting ? 'Creating...' : 'Create Event'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                  {/* Ticket Limit */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Ticket Limit</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.ticket_limit}
+                      onChangeText={(text) => setFormData({ ...formData, ticket_limit: text })}
+                      placeholder="0 for unlimited"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {/* Min Age */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Minimum Age</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.min_age}
+                      onChangeText={(text) => setFormData({ ...formData, min_age: text })}
+                      placeholder="18"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {/* Dress Code */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Dress Code</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.dress_code}
+                      onChangeText={(text) => setFormData({ ...formData, dress_code: text })}
+                      placeholder="e.g., Smart casual, Formal, etc."
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    />
+                  </View>
+
+                  {/* VIP Enabled */}
+                  <View style={styles.formGroup}>
+                    <View style={styles.switchContainer}>
+                      <View>
+                        <Text style={styles.label}>VIP Access</Text>
+                        <Text style={styles.switchDescription}>
+                          Enable VIP tables and reservations
+                        </Text>
+                      </View>
+                      <Switch
+                        value={formData.vip_enabled}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, vip_enabled: value })
+                        }
+                        trackColor={{ false: '#444', true: 'rgba(139, 92, 246, 0.6)' }}
+                        thumbColor={formData.vip_enabled ? 'rgba(139, 92, 246, 0.9)' : '#888'}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Custom Location */}
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Custom Location</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.custom_location}
+                      onChangeText={(text) => setFormData({ ...formData, custom_location: text })}
+                      placeholder="Optional: Override venue location"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    />
+                  </View>
+
+                  {/* Submit Button */}
+                  <TouchableOpacity
+                    style={styles.submitButtonContainer}
+                    onPress={handleSubmit}
+                    disabled={isCreatingEvent}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['rgba(139, 92, 246, 0.9)', 'rgba(217, 70, 239, 0.9)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.submitButton}
+                    >
+                      {isCreatingEvent ? (
+                        <ActivityIndicator color="white" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle" size={20} color="white" />
+                          <Text style={styles.submitButtonText}>Create Event</Text>
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </BlurView>
+            </ScrollView>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
+
+const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    backgroundColor: '#0a0a0f',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '400',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  formCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  formCardInner: {
+    backgroundColor: 'rgba(15, 15, 21, 0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    fontWeight: '400',
+    marginBottom: 8,
+  },
+  required: {
+    color: 'rgba(239, 68, 68, 0.9)',
+  },
+  input: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 14,
+    color: 'white',
+    fontSize: 15,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  dateButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateButtonText: {
+    color: 'white',
+    fontSize: 15,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  switchDescription: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  submitButtonContainer: {
+    marginTop: 10,
+  },
+  submitButton: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  submitButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+});
