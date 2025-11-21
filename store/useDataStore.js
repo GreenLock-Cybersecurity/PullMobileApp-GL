@@ -1,9 +1,10 @@
-// store/useDataStore.js - COMPLETO con deleteEvent
+// store/useDataStore.js - COMPLETO Y CORREGIDO
 import { create } from 'zustand';
 import { eventService } from '@/services/eventService';
 import { venueService } from '@/services/venueService';
 import { bookingService } from '@/services/bookingService';
 import { employeeService } from '@/services/employeeService';
+import { orderService } from '@/services/orderService';
 
 export const useDataStore = create((set, get) => ({
   // Venue info
@@ -47,6 +48,29 @@ export const useDataStore = create((set, get) => ({
   isLoadingEmployees: false,
   employeesError: null,
 
+  // Orders
+  orders: [],
+  isLoadingOrders: false,
+  ordersError: null,
+  ordersPagination: {
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    hasMore: false,
+    limit: 10,
+  },
+  currentOrderFilter: 'pending_staff_approval',
+  currentOrder: null,
+  isLoadingOrderDetail: false,
+  orderDetailError: null,
+  venueCurrency: 'EUR', // AÑADIDO
+
+  // Search
+  searchResults: [],
+  isSearching: false,
+  searchError: null,
+
+  // ==================== VENUE METHODS ====================
   fetchVenueInfo: async (venueId) => {
     if (!venueId) {
       set({ venueError: 'Venue ID is required' });
@@ -81,6 +105,15 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
+  clearVenueInfo: () => {
+    set({
+      venueInfo: null,
+      isLoadingVenue: false,
+      venueError: null,
+    });
+  },
+
+  // ==================== EVENTS METHODS ====================
   fetchUpcomingEvents: async (venueId) => {
     if (!venueId) {
       set({ eventsError: 'Venue ID is required' });
@@ -180,11 +213,11 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
-  clearVenueInfo: () => {
+  clearEvents: () => {
     set({
-      venueInfo: null,
-      isLoadingVenue: false,
-      venueError: null,
+      events: [],
+      isLoadingEvents: false,
+      eventsError: null,
     });
   },
 
@@ -244,7 +277,6 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
-  // NUEVA FUNCIÓN deleteEvent
   deleteEvent: async (eventId) => {
     set({ isDeletingEvent: true, deleteEventError: null });
 
@@ -252,16 +284,15 @@ export const useDataStore = create((set, get) => ({
       const result = await eventService.deleteEvent(eventId);
 
       if (result.success) {
-        // Eliminar el evento de la lista local
         const currentEvents = get().events;
         const updatedEvents = currentEvents.filter(event => event.id !== eventId);
-        
+
         set({
           events: updatedEvents,
           isDeletingEvent: false,
           deleteEventError: null,
         });
-        
+
         return { success: true, data: result.data };
       } else {
         set({
@@ -279,6 +310,7 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
+  // ==================== BOOKINGS METHODS ====================
   fetchBookings: async (venueId, options = {}) => {
     const { status = 'All', page = 1, resetList = false } = options;
 
@@ -410,6 +442,7 @@ export const useDataStore = create((set, get) => ({
     });
   },
 
+  // ==================== EMPLOYEES METHODS ====================
   fetchEmployees: async () => {
     set({ isLoadingEmployees: true, employeesError: null });
     try {
@@ -440,4 +473,251 @@ export const useDataStore = create((set, get) => ({
   },
 
   clearEmployees: () => set({ employees: [], employeesError: null }),
+
+  // ==================== ORDERS METHODS ====================
+  fetchOrders: async (venueId, options = {}) => {
+    const { status = 'pending_staff_approval', page = 1, resetList = false } = options;
+
+    if (!venueId) {
+      set({ ordersError: 'Venue ID is required' });
+      return;
+    }
+
+    if (page === 1 || resetList) {
+      set({
+        isLoadingOrders: true,
+        ordersError: null,
+        currentOrderFilter: status,
+      });
+    }
+
+    try {
+      const result = await orderService.getOrders(venueId, {
+        status,
+        page,
+        limit: 10,
+      });
+
+      if (result.success) {
+        const currentOrders = get().orders;
+        const newOrders = page === 1 || resetList ? result.data : [...currentOrders, ...result.data];
+
+        set({
+          orders: newOrders,
+          ordersPagination: result.pagination,
+          isLoadingOrders: false,
+          ordersError: null,
+          currentOrderFilter: status,
+          venueCurrency: result.currency || 'EUR', // AÑADIDO
+        });
+      } else {
+        set({
+          orders: page === 1 ? [] : get().orders,
+          isLoadingOrders: false,
+          ordersError: result.error,
+        });
+      }
+    } catch (error) {
+      set({
+        orders: page === 1 ? [] : get().orders,
+        isLoadingOrders: false,
+        ordersError: 'Network error. Please try again.',
+      });
+    }
+  },
+
+  loadMoreOrders: async (venueId) => {
+    const { ordersPagination, currentOrderFilter } = get();
+    if (!ordersPagination.hasMore) return;
+    await get().fetchOrders(venueId, {
+      status: currentOrderFilter,
+      page: ordersPagination.currentPage + 1,
+      resetList: false,
+    });
+  },
+
+  changeOrderFilter: async (venueId, newStatus) => {
+    await get().fetchOrders(venueId, {
+      status: newStatus,
+      page: 1,
+      resetList: true,
+    });
+  },
+
+  clearOrders: () => {
+    set({
+      orders: [],
+      isLoadingOrders: false,
+      ordersError: null,
+      ordersPagination: {
+        currentPage: 1,
+        totalPages: 1,
+        totalCount: 0,
+        hasMore: false,
+        limit: 10,
+      },
+      currentOrderFilter: 'pending_staff_approval',
+      venueCurrency: 'EUR',
+    });
+  },
+
+  fetchOrderDetail: async (orderId) => {
+    if (!orderId) {
+      set({ orderDetailError: 'Order ID is required' });
+      return;
+    }
+
+    set({ isLoadingOrderDetail: true, orderDetailError: null });
+
+    try {
+      const result = await orderService.getOrderDetails(orderId);
+      if (result.success) {
+        set({
+          currentOrder: result.data,
+          isLoadingOrderDetail: false,
+          orderDetailError: null,
+        });
+        return { success: true, data: result.data };
+      } else {
+        set({
+          currentOrder: null,
+          isLoadingOrderDetail: false,
+          orderDetailError: result.error,
+        });
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      set({
+        currentOrder: null,
+        isLoadingOrderDetail: false,
+        orderDetailError: 'Network error. Please try again.',
+      });
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  clearCurrentOrder: () => {
+    set({
+      currentOrder: null,
+      isLoadingOrderDetail: false,
+      orderDetailError: null,
+    });
+  },
+
+  // ==================== SEARCH ORDERS METHODS ====================
+  searchOrders: async (venueId, searchTerm, options = {}) => {
+    const { page = 1 } = options;
+
+    set({ isSearching: true, searchError: null });
+
+    try {
+      const result = await orderService.searchOrders(venueId, searchTerm, {
+        page,
+        limit: 20,
+      });
+
+      if (result.success) {
+        const currentResults = get().searchResults;
+        const newResults = page === 1 ? result.data : [...currentResults, ...result.data];
+
+        set({
+          searchResults: newResults,
+          ordersPagination: result.pagination,
+          isSearching: false,
+          searchError: null,
+          venueCurrency: result.currency || 'EUR',
+        });
+      } else {
+        set({
+          searchResults: page === 1 ? [] : get().searchResults,
+          isSearching: false,
+          searchError: result.error,
+        });
+      }
+    } catch (error) {
+      set({
+        searchResults: page === 1 ? [] : get().searchResults,
+        isSearching: false,
+        searchError: 'Network error. Please try again.',
+      });
+    }
+  },
+
+  clearSearch: () => {
+    set({
+      searchResults: [],
+      isSearching: false,
+      searchError: null,
+    });
+  },
+
+  // ==================== APPROVE/REJECT ORDERS ====================
+  approveOrder: async (orderId, venueId, organizationId, employeeId) => {
+    try {
+      const result = await orderService.approveOrder(
+        orderId,
+        venueId,
+        organizationId,
+        employeeId
+      );
+
+      if (result.success) {
+        // Refrescar el order actual si está cargado
+        const currentOrder = get().currentOrder;
+        if (currentOrder && currentOrder.order?.id === orderId) {
+          await get().fetchOrderDetail(orderId);
+        }
+
+        // Refrescar la lista de orders
+        const currentFilter = get().currentOrderFilter;
+        await get().fetchOrders(venueId, {
+          status: currentFilter,
+          page: 1,
+          resetList: true,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Network error. Please try again.',
+      };
+    }
+  },
+
+  rejectOrder: async (orderId, venueId, organizationId, employeeId, reason) => {
+    try {
+      const result = await orderService.rejectOrder(
+        orderId,
+        venueId,
+        organizationId,
+        employeeId,
+        reason
+      );
+
+      if (result.success) {
+        // Refrescar el order actual si está cargado
+        const currentOrder = get().currentOrder;
+        if (currentOrder && currentOrder.order?.id === orderId) {
+          await get().fetchOrderDetail(orderId);
+        }
+
+        // Refrescar la lista de orders
+        const currentFilter = get().currentOrderFilter;
+        await get().fetchOrders(venueId, {
+          status: currentFilter,
+          page: 1,
+          resetList: true,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Network error. Please try again.',
+      };
+    }
+  },
 }));

@@ -1,4 +1,4 @@
-// app/(tabs)/EventosList/index.js - CORREGIDO con imagen de fondo
+// app/(tabs)/EventosList/index.js - CORREGIDO COMPLETO
 import React, { useEffect } from 'react';
 import {
   View,
@@ -85,7 +85,7 @@ export default function EventosList() {
             />
             {item.minPrice && (
               <View style={styles.priceTag}>
-                <Text style={styles.priceText}>€{item.minPrice}</Text>
+                <Text style={styles.priceText}>Q{item.minPrice}</Text>
               </View>
             )}
           </View>
@@ -189,7 +189,6 @@ export default function EventosList() {
     </View>
   );
 
-  // Determinar qué imagen usar de fondo
   const backgroundImage = venueInfo?.image 
     ? { uri: venueInfo.image }
     : require('../../../assets/fondo.png');
@@ -249,7 +248,7 @@ export default function EventosList() {
             <FlatList
               data={events}
               renderItem={renderEvent}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item, index) => item.id?.toString() || `event-${index}`}
               showsVerticalScrollIndicator={false}
               initialNumToRender={5}
               refreshControl={
