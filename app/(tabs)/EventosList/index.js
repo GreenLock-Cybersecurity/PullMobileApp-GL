@@ -5,11 +5,9 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  Image,
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
-  ImageBackground,
   StyleSheet,
   Dimensions,
 } from 'react-native';
@@ -19,18 +17,26 @@ import { useDataStore } from '@/store/useDataStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import CustomHeader from '@/components/CustomHeader';
+import { OptimizedBackground, OptimizedImage } from '@/components/OptimizedImage';
+
+// Preload local background
+const FALLBACK_BACKGROUND = require('../../../assets/fondo.webp');
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 640;
+
+// Fixed margin above tab bar (works consistently across screens)
+const FAB_BOTTOM_MARGIN = 75;
 
 export default function EventosList() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
 
-  const { 
-    events, 
-    isLoadingEvents, 
-    eventsError, 
+  const {
+    events,
+    isLoadingEvents,
+    eventsError,
     fetchUpcomingEvents,
     venueInfo,
     isLoadingVenue,
@@ -76,12 +82,12 @@ export default function EventosList() {
         
         <View style={styles.eventCardInner}>
           <View style={styles.imageContainer}>
-            <Image
+            <OptimizedImage
               source={{
                 uri: item.poster || 'https://via.placeholder.com/140x140?text=No+Image',
               }}
               style={styles.eventImage}
-              resizeMode="cover"
+              contentFit="cover"
             />
             {item.minPrice && (
               <View style={styles.priceTag}>
@@ -119,40 +125,11 @@ export default function EventosList() {
               {item.name}
             </Text>
 
-            <View style={styles.details}>
-              {venueInfo?.name && (
-                <View style={styles.detailItem}>
-                  <Ionicons name="location-outline" size={14} color="rgb(52, 211, 153)" />
-                  <Text style={styles.detailText} numberOfLines={1}>
-                    {venueInfo.name}
-                  </Text>
-                </View>
-              )}
-
-              {item.dressCode && (
-                <View style={styles.detailItem}>
-                  <Ionicons name="shirt-outline" size={14} color="rgb(232, 121, 249)" />
-                  <Text style={styles.detailText} numberOfLines={1}>
-                    {item.dressCode}
-                  </Text>
-                </View>
-              )}
+            <View style={styles.viewDetailsRow}>
+              <Text style={styles.viewDetailsText}>View & Edit Details</Text>
+              <Ionicons name="arrow-forward" size={14} color="rgba(167, 139, 250, 0.9)" />
             </View>
           </View>
-
-          {!isSmallScreen && (
-            <View style={styles.buttonContainer}>
-              <LinearGradient
-                colors={['transparent', 'rgba(139, 92, 246, 0.1)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.viewButton}
-              >
-                <Text style={styles.viewButtonText}>View Details</Text>
-                <Ionicons name="arrow-forward" size={14} color="rgba(167, 139, 250, 0.9)" />
-              </LinearGradient>
-            </View>
-          )}
         </View>
       </BlurView>
     </TouchableOpacity>
@@ -189,55 +166,57 @@ export default function EventosList() {
     </View>
   );
 
-  const backgroundImage = venueInfo?.image 
+  const backgroundImage = venueInfo?.image
     ? { uri: venueInfo.image }
-    : require('../../../assets/fondo.png');
+    : FALLBACK_BACKGROUND;
 
   return (
-    <ImageBackground
+    <OptimizedBackground
       source={backgroundImage}
       style={styles.background}
       blurRadius={15}
     >
       <View style={styles.overlay} />
-      
+      <CustomHeader title="Events" />
+
       <SafeAreaView style={{ flex: 1 }}>
-        {isLoadingVenue ? (
-          <View style={styles.venueBanner}>
-            <ActivityIndicator size="small" color="rgba(139, 92, 246, 0.9)" />
-          </View>
-        ) : venueInfo && (
-          <View style={styles.venueBanner}>
-            <View style={styles.venueAvatarContainer}>
-              <LinearGradient
-                colors={['rgba(167, 139, 250, 0.6)', 'rgba(232, 121, 249, 0.6)', 'rgba(139, 92, 246, 0.6)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.venueAvatarGradient}
-              >
-                <Image
-                  source={{
-                    uri: venueInfo.image || 'https://via.placeholder.com/120x120?text=Venue',
-                  }}
-                  style={styles.venueAvatar}
-                  resizeMode="cover"
-                />
-              </LinearGradient>
+        <View style={{ flex: 1, paddingTop: 50 }}>
+          {isLoadingVenue ? (
+            <View style={styles.venueBanner}>
+              <ActivityIndicator size="small" color="rgba(139, 92, 246, 0.9)" />
             </View>
-            
-            <View style={styles.venueInfo}>
-              <Text style={styles.venueTitle}>{venueInfo.name}</Text>
-              <View style={styles.venueLocation}>
-                <Ionicons name="location" size={16} color="rgb(52, 211, 153)" />
-                <Text style={styles.venueLocationText}>
-                  {venueInfo.long_location || venueInfo.location}
-                </Text>
+          ) : venueInfo && (
+            <View style={styles.venueBanner}>
+              <View style={styles.venueAvatarContainer}>
+                <LinearGradient
+                  colors={['rgba(167, 139, 250, 0.6)', 'rgba(232, 121, 249, 0.6)', 'rgba(139, 92, 246, 0.6)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.venueAvatarGradient}
+                >
+                  <OptimizedImage
+                    source={{
+                      uri: venueInfo.image || 'https://via.placeholder.com/120x120?text=Venue',
+                    }}
+                    style={styles.venueAvatar}
+                    contentFit="cover"
+                  />
+                </LinearGradient>
+              </View>
+
+              <View style={styles.venueInfo}>
+                <Text style={styles.venueTitle}>{venueInfo.name}</Text>
+                <View style={styles.venueLocation}>
+                  <Ionicons name="location" size={16} color="rgb(52, 211, 153)" />
+                  <Text style={styles.venueLocationText}>
+                    {venueInfo.long_location || venueInfo.location}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
-        )}
+          )}
 
-        <View style={styles.container}>
+          <View style={styles.container}>
           <Text style={styles.title}>Your Events</Text>
 
           {isLoadingEvents ? (
@@ -261,26 +240,34 @@ export default function EventosList() {
               ListEmptyComponent={<EmptyComponent />}
             />
           )}
-        </View>
+          </View>
 
-        {user?.role === 'staff' && (
-          <TouchableOpacity
-            style={styles.fab}
-            onPress={() => router.push('/(tabs)/EventosList/EventoNuevo')}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['rgba(139, 92, 246, 0.9)', 'rgba(217, 70, 239, 0.9)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.fabGradient}
-            >
-              <Ionicons name="add" size={28} color="white" />
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
+          {user?.role === 'admin' && (
+            <View style={[styles.fabContainer, { bottom: FAB_BOTTOM_MARGIN }]}>
+              <TouchableOpacity
+                style={styles.fab}
+                onPress={() => router.push('/(tabs)/EventosList/EventoNuevo')}
+                activeOpacity={0.8}
+              >
+                <BlurView intensity={80} tint="dark" style={styles.fabBlur}>
+                  <LinearGradient
+                    colors={['rgba(139, 92, 246, 0.3)', 'rgba(217, 70, 239, 0.2)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.fabGradient}
+                  >
+                    <View style={styles.fabInner}>
+                      <Ionicons name="add" size={24} color="white" />
+                      <Text style={styles.fabText}>New Event</Text>
+                    </View>
+                  </LinearGradient>
+                </BlurView>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </SafeAreaView>
-    </ImageBackground>
+    </OptimizedBackground>
   );
 }
 
@@ -291,13 +278,14 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   venueBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingTop: 32,
+    paddingBottom: 20,
     gap: 16,
   },
   venueAvatarContainer: {
@@ -343,7 +331,7 @@ const styles = StyleSheet.create({
   title: {
     color: 'white',
     fontSize: 28,
-    fontWeight: '400',
+    fontWeight: '500',
     letterSpacing: -0.5,
     marginBottom: 20,
   },
@@ -422,39 +410,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: isSmallScreen ? 20 : 24,
   },
-  details: {
-    gap: 6,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: isSmallScreen ? 12 : 13,
-    fontWeight: '300',
-    flex: 1,
-  },
-  buttonContainer: {
-    width: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingRight: 8,
-  },
-  viewButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
+  viewDetailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  viewButtonText: {
+  viewDetailsText: {
     color: 'rgba(167, 139, 250, 0.9)',
-    fontSize: 12,
+    fontSize: isSmallScreen ? 12 : 13,
     fontWeight: '400',
   },
   centerContainer: {
@@ -506,24 +469,41 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
   },
-  fab: {
+  fabContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    right: 16,
+    zIndex: 100,
+  },
+  fab: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 12,
+    shadowColor: 'rgba(139, 92, 246, 0.5)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+  },
+  fabBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   fabGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 28,
-    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  fabInner: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    backgroundColor: 'rgba(15, 15, 25, 0.4)',
+  },
+  fabText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
 });

@@ -1,132 +1,154 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '@/services/authService';
+import { secureStorage } from './secureStorage';
+import { notificationService } from '@/services/notificationService';
 
-export const useAuthStore = create(
-  persist(
-    (set, get) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
+export const useAuthStore = create((set, get) => ({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  isLoading: false,
+  isInitialized: false,
+  error: null,
 
-      login: async (email, password) => {
-        set({ isLoading: true, error: null });
+  login: async (email, password) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const result = await authService.login(email, password);
+
+      if (result.success) {
+        const { user, token } = result.data;
+
+        await secureStorage.setToken(token);
+        await secureStorage.setUser(user);
+
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        });
 
         try {
-          const result = await authService.login(email, password);
-
-          if (result.success) {
-            const { user, token } = result.data;
-
-            set({
-              user,
-              token,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
-            });
-
-            return { success: true };
-          } else {
-            set({
-              user: null,
-              token: null,
-              isAuthenticated: false,
-              isLoading: false,
-              error: result.error,
-            });
-
-            return { success: false, error: result.error };
+          const pushToken = await notificationService.registerForPushNotifications();
+          if (pushToken && user.venue_id_real && user.employee_id_real) {
+            await notificationService.registerTokenWithBackend(
+              user.venue_id_real,
+              user.employee_id_real
+            );
           }
-        } catch (error) {
-          set({
-            user: null,
-            token: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: 'Network error. Please try again.',
-          });
-
-          return { success: false, error: 'Network error. Please try again.' };
+        } catch {
         }
-      },
 
-      logout: () => {
-        authService.logout();
-
+        return { success: true };
+      } else {
         set({
           user: null,
           token: null,
           isAuthenticated: false,
-          error: null,
+          isLoading: false,
+          error: result.error,
         });
-      },
 
-      initializeAuth: async () => {
-        const { token } = get();
+        return { success: false, error: result.error };
+      }
+    } catch {
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: 'Network error. Please try again.',
+      });
 
-        if (token) {
-          authService.setAuthToken(token);
-
-          const result = await authService.verifyToken();
-
-          if (result.success) {
-            set({
-              user: result.data,
-              isAuthenticated: true,
-            });
-          } else {
-            get().logout();
-          }
-        } else {
-          console.log('🔐 AuthStore: No token found');
-        }
-      },
-
-      refreshToken: async () => {
-        const { token } = get();
-
-        if (!token) {
-          get().logout();
-          return { success: false, error: 'No token available' };
-        }
-
-        try {
-          const result = await authService.refreshToken(token);
-
-          if (result.success) {
-            set({ token: result.data.token });
-            return { success: true };
-          } else {
-            get().logout();
-            return { success: false, error: result.error };
-          }
-        } catch (error) {
-          get().logout();
-          return { success: false, error: 'Token refresh failed' };
-        }
-      },
-
-      clearError: () => {
-        set({ error: null });
-      },
-    }),
-    {
-      name: 'auth-storage',
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state?.token) {
-          authService.setAuthToken(state.token);
-        }
-      },
+      return { success: false, error: 'Network error. Please try again.' };
     }
-  )
-);
+  },
+
+  logout: async () => {
+    try {
+      await notificationService.unregisterToken();
+      notificationService.removeNotificationListeners();
+    } catch {
+    }
+
+    authService.logout();
+
+    await secureStorage.clearAll();
+
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      error: null,
+    });
+  },
+
+  initializeAuth: async () => {
+    try {
+      const token = await secureStorage.getToken();
+      const user = await secureStorage.getUser();
+
+      if (token) {
+        authService.setAuthToken(token);
+
+        const result = await authService.verifyToken();
+
+        if (result.success) {
+          set({
+            user: result.data || user,
+            token,
+            isAuthenticated: true,
+            isInitialized: true,
+          });
+        } else {
+          await secureStorage.clearAll();
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isInitialized: true,
+          });
+        }
+      } else {
+        set({ isInitialized: true });
+      }
+    } catch {
+      set({ isInitialized: true });
+    }
+  },
+
+  refreshToken: async () => {
+    const { token } = get();
+
+    if (!token) {
+      await get().logout();
+      return { success: false, error: 'No token available' };
+    }
+
+    try {
+      const result = await authService.refreshToken(token);
+
+      if (result.success) {
+        const newToken = result.data.token;
+
+        await secureStorage.setToken(newToken);
+
+        set({ token: newToken });
+        return { success: true };
+      } else {
+        await get().logout();
+        return { success: false, error: result.error };
+      }
+    } catch {
+      await get().logout();
+      return { success: false, error: 'Token refresh failed' };
+    }
+  },
+
+  clearError: () => {
+    set({ error: null });
+  },
+}));

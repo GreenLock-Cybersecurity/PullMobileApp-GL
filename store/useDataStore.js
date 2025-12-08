@@ -2,9 +2,9 @@
 import { create } from 'zustand';
 import { eventService } from '@/services/eventService';
 import { venueService } from '@/services/venueService';
-import { bookingService } from '@/services/bookingService';
 import { employeeService } from '@/services/employeeService';
 import { orderService } from '@/services/orderService';
+import { groupReservationService } from '@/services/groupReservationService';
 
 export const useDataStore = create((set, get) => ({
   // Venue info
@@ -25,23 +25,6 @@ export const useDataStore = create((set, get) => ({
   updateEventError: null,
   isDeletingEvent: false,
   deleteEventError: null,
-
-  // Bookings
-  bookings: [],
-  isLoadingBookings: false,
-  bookingsError: null,
-  bookingsPagination: {
-    currentPage: 1,
-    totalPages: 1,
-    totalCount: 0,
-    hasMore: false,
-    limit: 10,
-  },
-  currentBookingFilter: 'All',
-  currentBooking: null,
-  isLoadingBookingDetail: false,
-  bookingDetailError: null,
-  currentBookingModifications: null,
 
   // Employees
   employees: [],
@@ -70,6 +53,10 @@ export const useDataStore = create((set, get) => ({
   isSearching: false,
   searchError: null,
 
+  // Pending counts for badges
+  pendingIndividualCount: 0,
+  pendingGroupCount: 0,
+
   // ==================== VENUE METHODS ====================
   fetchVenueInfo: async (venueId) => {
     if (!venueId) {
@@ -95,8 +82,7 @@ export const useDataStore = create((set, get) => ({
           venueError: result.error,
         });
       }
-    } catch (error) {
-      console.error('❌ Error fetching venue info:', error);
+    } catch {
       set({
         venueInfo: null,
         isLoadingVenue: false,
@@ -125,8 +111,6 @@ export const useDataStore = create((set, get) => ({
     try {
       const result = await eventService.getUpcomingEvents(venueId);
 
-      console.log('📦 Full result:', result);
-
       if (result.success && result.data && Array.isArray(result.data)) {
         const mappedEvents = result.data.map((event) => ({
           id: event.event_id || event.id,
@@ -143,11 +127,8 @@ export const useDataStore = create((set, get) => ({
           minAge: event.min_age || 18,
           minPrice: event.min_price,
           dressCode: event.dress_code || '',
-          accessType: event.access_type || '',
           customLocation: event.custom_location || '',
         }));
-
-        console.log('✅ Mapped events:', mappedEvents);
 
         set({
           events: mappedEvents,
@@ -155,15 +136,13 @@ export const useDataStore = create((set, get) => ({
           eventsError: null,
         });
       } else {
-        console.log('❌ Invalid result structure');
         set({
           events: [],
           isLoadingEvents: false,
           eventsError: result.error || 'No events found',
         });
       }
-    } catch (error) {
-      console.error('❌ Error fetching events:', error);
+    } catch {
       set({
         events: [],
         isLoadingEvents: false,
@@ -310,138 +289,6 @@ export const useDataStore = create((set, get) => ({
     }
   },
 
-  // ==================== BOOKINGS METHODS ====================
-  fetchBookings: async (venueId, options = {}) => {
-    const { status = 'All', page = 1, resetList = false } = options;
-
-    if (!venueId) {
-      set({ bookingsError: 'Venue ID is required' });
-      return;
-    }
-
-    if (page === 1 || resetList) {
-      set({
-        isLoadingBookings: true,
-        bookingsError: null,
-        currentBookingFilter: status,
-      });
-    }
-
-    try {
-      const result = await bookingService.getBookings(venueId, {
-        status,
-        page,
-        limit: 10,
-      });
-
-      if (result.success) {
-        const currentBookings = get().bookings;
-        const newBookings = page === 1 || resetList ? result.data : [...currentBookings, ...result.data];
-
-        set({
-          bookings: newBookings,
-          bookingsPagination: result.pagination,
-          isLoadingBookings: false,
-          bookingsError: null,
-          currentBookingFilter: status,
-        });
-      } else {
-        set({
-          bookings: page === 1 ? [] : get().bookings,
-          isLoadingBookings: false,
-          bookingsError: result.error,
-        });
-      }
-    } catch (error) {
-      set({
-        bookings: page === 1 ? [] : get().bookings,
-        isLoadingBookings: false,
-        bookingsError: 'Network error. Please try again.',
-      });
-    }
-  },
-
-  loadMoreBookings: async (venueId) => {
-    const { bookingsPagination, currentBookingFilter } = get();
-    if (!bookingsPagination.hasMore) return;
-    await get().fetchBookings(venueId, {
-      status: currentBookingFilter,
-      page: bookingsPagination.currentPage + 1,
-      resetList: false,
-    });
-  },
-
-  changeBookingFilter: async (venueId, newStatus) => {
-    await get().fetchBookings(venueId, {
-      status: newStatus,
-      page: 1,
-      resetList: true,
-    });
-  },
-
-  clearBookings: () => {
-    set({
-      bookings: [],
-      isLoadingBookings: false,
-      bookingsError: null,
-      bookingsPagination: {
-        currentPage: 1,
-        totalPages: 1,
-        totalCount: 0,
-        hasMore: false,
-        limit: 10,
-      },
-      currentBookingFilter: 'All',
-    });
-  },
-
-  fetchBookingDetail: async (bookingId) => {
-    if (!bookingId) {
-      set({ bookingDetailError: 'Booking ID is required' });
-      return;
-    }
-
-    set({ isLoadingBookingDetail: true, bookingDetailError: null });
-
-    try {
-      const result = await bookingService.getBookingDetails(bookingId);
-      if (result.success) {
-        set({
-          currentBooking: result.data,
-          currentBookingModifications: result.modifications || null,
-          isLoadingBookingDetail: false,
-          bookingDetailError: null,
-        });
-        return { success: true, data: result.data };
-      } else {
-        set({
-          currentBooking: null,
-          currentBookingModifications: null,
-          isLoadingBookingDetail: false,
-          bookingDetailError: result.error,
-        });
-        return { success: false, error: result.error };
-      }
-    } catch (error) {
-      set({
-        currentBooking: null,
-        currentBookingModifications: null,
-        isLoadingBookingDetail: false,
-        bookingDetailError: 'Network error. Please try again.',
-      });
-      return { success: false, error: 'Network error. Please try again.' };
-    }
-  },
-
-  clearCurrentBooking: () => {
-    set({
-      currentBooking: null,
-      currentBookingModifications: null,
-      isLoadingBookingDetail: false,
-      bookingDetailError: null,
-    });
-  },
-
   // ==================== EMPLOYEES METHODS ====================
   fetchEmployees: async () => {
     set({ isLoadingEmployees: true, employeesError: null });
@@ -473,6 +320,65 @@ export const useDataStore = create((set, get) => ({
   },
 
   clearEmployees: () => set({ employees: [], employeesError: null }),
+
+  addEmployee: async (employeeData) => {
+    try {
+      const result = await employeeService.createEmployee({
+        first_name: employeeData.firstName,
+        last_name: employeeData.lastName,
+        email: employeeData.email,
+        dpi: employeeData.dpi,
+      });
+
+      if (result.success) {
+        // Refetch employees to update the list
+        await get().fetchEmployees();
+        return { success: true, data: result.data };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch {
+      return { success: false, error: 'Failed to create employee' };
+    }
+  },
+
+  updateEmployeeData: async (employeeId, employeeData) => {
+    try {
+      const result = await employeeService.updateEmployee(employeeId, {
+        firstName: employeeData.firstName,
+        lastName: employeeData.lastName,
+        email: employeeData.email,
+        dpi: employeeData.dpi,
+      });
+
+      if (result.success) {
+        await get().fetchEmployees();
+        return { success: true, data: result.data };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Failed to update employee' };
+    }
+  },
+
+  removeEmployee: async (employeeId) => {
+    try {
+      const result = await employeeService.deleteEmployee(employeeId);
+
+      if (result.success) {
+        const currentEmployees = get().employees;
+        set({
+          employees: currentEmployees.filter(emp => emp.id !== employeeId),
+        });
+        return { success: true };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      return { success: false, error: 'Failed to delete employee' };
+    }
+  },
 
   // ==================== ORDERS METHODS ====================
   fetchOrders: async (venueId, options = {}) => {
@@ -719,5 +625,45 @@ export const useDataStore = create((set, get) => ({
         error: 'Network error. Please try again.',
       };
     }
+  },
+
+  // ==================== PENDING COUNTS ====================
+  fetchPendingCounts: async (venueId) => {
+    if (!venueId) {
+      return;
+    }
+
+    try {
+      // Fetch individual pending orders count
+      const individualResult = await orderService.getOrders(venueId, {
+        status: 'pending',
+        page: 1,
+        limit: 1,
+      });
+
+      // Fetch group pending reservations count
+      const groupResult = await groupReservationService.getGroupReservations(venueId, {
+        status: 'pending',
+        page: 1,
+        limit: 1,
+      });
+
+      const individualCount = individualResult.success ? (individualResult.pagination?.totalCount || 0) : 0;
+      const groupCount = groupResult.success ? (groupResult.pagination?.totalCount || 0) : 0;
+
+      set({
+        pendingIndividualCount: individualCount,
+        pendingGroupCount: groupCount,
+      });
+    } catch {
+      // Silently handle error - counts will remain at 0
+    }
+  },
+
+  clearPendingCounts: () => {
+    set({
+      pendingIndividualCount: 0,
+      pendingGroupCount: 0,
+    });
   },
 }));

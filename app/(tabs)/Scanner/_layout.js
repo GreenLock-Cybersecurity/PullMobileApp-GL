@@ -15,7 +15,7 @@ export default function ScannerLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'QR Scanner',
+          headerShown: false,
         }}
       />
     </Stack>

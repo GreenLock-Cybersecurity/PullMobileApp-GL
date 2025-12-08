@@ -4,12 +4,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Alert,
   SafeAreaView,
   Platform,
   StyleSheet,
   Dimensions,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,11 +26,13 @@ export default function Scanner() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [zoom, setZoom] = useState(0.3);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [scanResult, setScanResult] = useState(null); // { success: bool, data: obj, error: string }
 
   const debounceTimeoutRef = useRef(null);
   const lastScanTimeRef = useRef(0);
   const scanLineAnim = useRef(new Animated.Value(0)).current;
+  const resultOpacity = useRef(new Animated.Value(0)).current;
 
   const { user } = useAuthStore();
   const { isValidating, validateTicket } = useTicketStore();
@@ -65,6 +67,28 @@ export default function Scanner() {
     }, [])
   );
 
+  const showResultOverlay = (result) => {
+    setScanResult(result);
+    resultOpacity.setValue(0);
+    Animated.timing(resultOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const hideResultOverlay = () => {
+    Animated.timing(resultOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setScanResult(null);
+      setScanned(false);
+      lastScanTimeRef.current = 0;
+    });
+  };
+
   const handleBarcodeScanned = async ({ data }) => {
     const now = Date.now();
     if (scanned || isValidating || now - lastScanTimeRef.current < 2000) {
@@ -80,44 +104,12 @@ export default function Scanner() {
 
     debounceTimeoutRef.current = setTimeout(async () => {
       const result = await validateTicket(data, user);
-
-      if (result.success) {
-        Alert.alert(
-          '✅ Access Granted',
-          `Welcome!\nEvent: ${result.data.event_name}\nTicket: ${result.data.ticket_type}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setScanned(false);
-                lastScanTimeRef.current = 0;
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('❌ Access Denied', result.error || 'Validation failed', [
-          {
-            text: 'OK',
-            onPress: () => {
-              setScanned(false);
-              lastScanTimeRef.current = 0;
-            },
-          },
-        ]);
-      }
+      showResultOverlay(result);
     }, 300);
   };
 
-  const toggleCameraFacing = () => {
-    setFacing((current) => (current === 'back' ? 'front' : 'back'));
-  };
-
-  const adjustZoom = (direction) => {
-    setZoom((current) => {
-      const newZoom = direction === 'in' ? current + 0.1 : current - 0.1;
-      return Math.max(0, Math.min(1, newZoom));
-    });
+  const toggleTorch = () => {
+    setTorchEnabled((current) => !current);
   };
 
   if (!permission) {
@@ -225,7 +217,7 @@ export default function Scanner() {
         <CameraView
           style={StyleSheet.absoluteFill}
           facing={facing}
-          zoom={zoom}
+          enableTorch={torchEnabled}
           onBarcodeScanned={scanned || isValidating ? undefined : handleBarcodeScanned}
           barcodeScannerSettings={{
             barcodeTypes: ['qr'],
@@ -242,34 +234,12 @@ export default function Scanner() {
           
           {/* Frame de escaneo */}
           <View style={styles.scanFrame}>
-            <View style={[
-              styles.scanFrameBorder,
-              { borderColor: scanned || isValidating ? '#f59e0b' : 'rgba(139, 92, 246, 0.8)' }
-            ]}>
+            <View style={styles.scanFrameBorder}>
               {/* Corners */}
               <View style={[styles.cornerTL, { borderColor: scanned || isValidating ? '#f59e0b' : '#8b5cf6' }]} />
               <View style={[styles.cornerTR, { borderColor: scanned || isValidating ? '#f59e0b' : '#8b5cf6' }]} />
               <View style={[styles.cornerBL, { borderColor: scanned || isValidating ? '#f59e0b' : '#8b5cf6' }]} />
               <View style={[styles.cornerBR, { borderColor: scanned || isValidating ? '#f59e0b' : '#8b5cf6' }]} />
-
-              {/* Línea de escaneo animada */}
-              {!scanned && !isValidating && (
-                <Animated.View
-                  style={[
-                    styles.scanLine,
-                    {
-                      transform: [{ translateY: scanLineTranslateY }],
-                    },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={['transparent', 'rgba(139, 92, 246, 0.8)', 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={styles.scanLineGradient}
-                  />
-                </Animated.View>
-              )}
             </View>
           </View>
           
@@ -290,42 +260,25 @@ export default function Scanner() {
           </BlurView>
         </View>
 
-        {/* Controls */}
+        {/* Flashlight Button - positioned higher */}
         <View style={styles.controls}>
-          <View style={styles.controlsRow}>
-            <TouchableOpacity
-              onPress={() => adjustZoom('out')}
-              disabled={isValidating}
-              activeOpacity={0.8}
-              style={styles.controlButton}
-            >
-              <BlurView intensity={40} tint="dark" style={styles.controlButtonBlur}>
-                <Ionicons name="remove" size={20} color="white" />
-              </BlurView>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => adjustZoom('in')}
-              disabled={isValidating}
-              activeOpacity={0.8}
-              style={styles.controlButton}
-            >
-              <BlurView intensity={40} tint="dark" style={styles.controlButtonBlur}>
-                <Ionicons name="add" size={20} color="white" />
-              </BlurView>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={toggleCameraFacing}
-              disabled={isValidating}
-              activeOpacity={0.8}
-              style={styles.controlButton}
-            >
-              <BlurView intensity={40} tint="dark" style={styles.controlButtonBlur}>
-                <Ionicons name="camera-reverse" size={20} color="white" />
-              </BlurView>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={toggleTorch}
+            disabled={isValidating}
+            activeOpacity={0.8}
+            style={styles.controlButton}
+          >
+            <BlurView intensity={40} tint="dark" style={[
+              styles.controlButtonBlur,
+              torchEnabled && styles.controlButtonActive
+            ]}>
+              <Ionicons
+                name={torchEnabled ? "flashlight" : "flashlight-outline"}
+                size={24}
+                color={torchEnabled ? "#fbbf24" : "white"}
+              />
+            </BlurView>
+          </TouchableOpacity>
 
           {/* Status indicator */}
           {(isValidating || scanned) && (
@@ -354,6 +307,72 @@ export default function Scanner() {
           )}
         </View>
       </SafeAreaView>
+
+      {/* Result Overlay */}
+      {scanResult && (
+        <Animated.View style={[styles.resultOverlay, { opacity: resultOpacity }]}>
+          <BlurView intensity={90} tint="dark" style={styles.resultCard}>
+            <LinearGradient
+              colors={
+                scanResult.success
+                  ? ['rgba(34, 197, 94, 0.15)', 'rgba(16, 185, 129, 0.05)']
+                  : ['rgba(239, 68, 68, 0.15)', 'rgba(220, 38, 38, 0.05)']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.resultCardInner}>
+              <View style={[
+                styles.resultIconContainer,
+                { backgroundColor: scanResult.success ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)' }
+              ]}>
+                <Ionicons
+                  name={scanResult.success ? 'checkmark-circle' : 'close-circle'}
+                  size={56}
+                  color={scanResult.success ? '#22c55e' : '#ef4444'}
+                />
+              </View>
+              <Text style={[
+                styles.resultTitle,
+                { color: scanResult.success ? '#22c55e' : '#ef4444' }
+              ]}>
+                {scanResult.success ? 'Acceso Permitido' : 'Acceso Denegado'}
+              </Text>
+              {scanResult.success && scanResult.data && (
+                <>
+                  <Text style={styles.resultEventName}>{scanResult.data.event_name}</Text>
+                  <Text style={styles.resultMessage}>{scanResult.data.message}</Text>
+                </>
+              )}
+              {!scanResult.success && (
+                <Text style={styles.resultError}>
+                  {scanResult.error || 'Ticket inválido o ya validado'}
+                </Text>
+              )}
+
+              <TouchableOpacity
+                onPress={hideResultOverlay}
+                activeOpacity={0.8}
+                style={{ marginTop: 24, width: '100%' }}
+              >
+                <LinearGradient
+                  colors={
+                    scanResult.success
+                      ? ['rgba(34, 197, 94, 0.8)', 'rgba(16, 185, 129, 0.8)']
+                      : ['rgba(239, 68, 68, 0.8)', 'rgba(220, 38, 38, 0.8)']
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.okButton}
+                >
+                  <Text style={styles.okButtonText}>OK</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -467,11 +486,11 @@ const styles = StyleSheet.create({
   },
   overlayTop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'transparent',
   },
   overlayBottom: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'transparent',
   },
   scannerRow: {
     flexDirection: 'row',
@@ -479,7 +498,7 @@ const styles = StyleSheet.create({
   },
   overlaySide: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'transparent',
   },
   scanFrame: {
     width: 280,
@@ -490,50 +509,49 @@ const styles = StyleSheet.create({
   scanFrameBorder: {
     width: 240,
     height: 240,
-    borderWidth: 2,
     borderRadius: 24,
     position: 'relative',
   },
 
-  // Corners
+  // Corners - thicker lines
   cornerTL: {
     position: 'absolute',
     top: -2,
     left: -2,
-    width: 40,
-    height: 40,
-    borderLeftWidth: 4,
-    borderTopWidth: 4,
+    width: 50,
+    height: 50,
+    borderLeftWidth: 6,
+    borderTopWidth: 6,
     borderTopLeftRadius: 24,
   },
   cornerTR: {
     position: 'absolute',
     top: -2,
     right: -2,
-    width: 40,
-    height: 40,
-    borderRightWidth: 4,
-    borderTopWidth: 4,
+    width: 50,
+    height: 50,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
     borderTopRightRadius: 24,
   },
   cornerBL: {
     position: 'absolute',
     bottom: -2,
     left: -2,
-    width: 40,
-    height: 40,
-    borderLeftWidth: 4,
-    borderBottomWidth: 4,
+    width: 50,
+    height: 50,
+    borderLeftWidth: 6,
+    borderBottomWidth: 6,
     borderBottomLeftRadius: 24,
   },
   cornerBR: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 40,
-    height: 40,
-    borderRightWidth: 4,
-    borderBottomWidth: 4,
+    width: 50,
+    height: 50,
+    borderRightWidth: 6,
+    borderBottomWidth: 6,
     borderBottomRightRadius: 24,
   },
 
@@ -559,6 +577,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   headerTitle: {
     color: 'white',
@@ -577,22 +596,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  // Controls
+  // Controls - positioned higher
   controls: {
-    paddingBottom: 40,
+    paddingBottom: 140,
     paddingHorizontal: 24,
     alignItems: 'center',
     gap: 16,
     zIndex: 2,
   },
-  controlsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   controlButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     overflow: 'hidden',
   },
   controlButtonBlur: {
@@ -602,6 +617,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  controlButtonActive: {
+    borderColor: 'rgba(251, 191, 36, 0.5)',
+    backgroundColor: 'rgba(251, 191, 36, 0.2)',
   },
 
   // Status Badge
@@ -623,5 +643,72 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '400',
+  },
+
+  // Result Overlay
+  resultOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    zIndex: 10,
+    padding: 24,
+  },
+  resultCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  resultCardInner: {
+    backgroundColor: 'rgba(15, 15, 21, 0.9)',
+    padding: 32,
+    alignItems: 'center',
+  },
+  resultIconContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  resultTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  resultEventName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  resultMessage: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center',
+  },
+  resultError: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  okButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  okButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

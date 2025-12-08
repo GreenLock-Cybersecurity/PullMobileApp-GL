@@ -15,21 +15,19 @@ export default function EmpleadosLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Employees',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="EmpleadoNuevo"
         options={{
-          title: 'New Employee',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="EmpleadoEditar"
         options={{
-          title: 'Edit Employee',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
     </Stack>

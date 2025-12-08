@@ -1,5 +1,4 @@
-// services/eventService.js - CORREGIDO con named import
-import { apiClient } from './api';  // ← Cambiar a destructuring
+import { apiClient } from './api';
 
 export const eventService = {
   getUpcomingEvents: async (venueId) => {
@@ -10,7 +9,6 @@ export const eventService = {
         data: response.data || [],
       };
     } catch (error) {
-      console.error('❌ getUpcomingEvents error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to fetch events',
@@ -26,7 +24,6 @@ export const eventService = {
         data: response.data,
       };
     } catch (error) {
-      console.error('❌ getEventDetail error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to fetch event details',
@@ -42,7 +39,6 @@ export const eventService = {
         data: response.data,
       };
     } catch (error) {
-      console.error('❌ createEvent error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to create event',
@@ -58,7 +54,6 @@ export const eventService = {
         data: response.data,
       };
     } catch (error) {
-      console.error('❌ updateEvent error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to update event',
@@ -74,10 +69,24 @@ export const eventService = {
         data: response.data,
       };
     } catch (error) {
-      console.error('❌ deleteEvent error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to delete event',
+      };
+    }
+  },
+
+  createEventWithTickets: async (eventData) => {
+    try {
+      const response = await apiClient.post('/event/create-event-with-tickets', eventData);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to create event with tickets',
       };
     }
   },

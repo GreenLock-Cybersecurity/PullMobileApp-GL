@@ -1,10 +1,9 @@
-// services/orderService.js
 import { apiClient } from './api';
 
 export const orderService = {
   getOrders: async (venueId, options = {}) => {
     try {
-      const { status = 'pending_staff_approval', page = 1, limit = 10 } = options;
+      const { status = 'pending', page = 1, limit = 10 } = options;
 
       const params = new URLSearchParams({
         page: page.toString(),

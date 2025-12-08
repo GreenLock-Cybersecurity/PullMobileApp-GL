@@ -4,7 +4,6 @@ export const employeeService = {
   getEmployees: async () => {
     try {
       const response = await apiClient.get('/employees/employees');
-
       return {
         success: true,
         data: response.data.data,
@@ -40,7 +39,10 @@ export const employeeService = {
       const response = await apiClient.post('/employees/create', employeeData);
       return {
         success: true,
-        data: response.data.data,
+        data: {
+          ...response.data.data,
+          generatedPassword: response.data.generatedPassword,
+        },
       };
     } catch (error) {
       return {

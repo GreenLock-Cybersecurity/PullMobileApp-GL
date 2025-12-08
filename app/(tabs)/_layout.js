@@ -2,6 +2,7 @@ import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useEffect } from 'react';
+import CustomTabBar from '@/components/CustomTabBar';
 
 export default function TabLayout() {
   const { isAuthenticated, user } = useAuthStore();
@@ -19,23 +20,21 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#000000',
-          borderTopColor: '#374151',
-          borderTopWidth: 1,
-        },
-        tabBarActiveTintColor: '#10b981',
-        tabBarInactiveTintColor: '#6b7280',
       }}
     >
       <Tabs.Screen
         name="EventosList"
         options={{
           title: 'Events',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="calendar" size={size} color={color} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -43,8 +42,12 @@ export default function TabLayout() {
         name="ReservasList"
         options={{
           title: 'Bookings',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="restaurant" size={size} color={color} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name={focused ? 'ticket' : 'ticket-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -52,8 +55,12 @@ export default function TabLayout() {
         name="Scanner"
         options={{
           title: 'Scanner',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="qr-code" size={size} color={color} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name={focused ? 'qr-code' : 'qr-code-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -61,8 +68,12 @@ export default function TabLayout() {
         name="EmpleadosList"
         options={{
           title: 'Employees',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="people" size={size} color={color} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name={focused ? 'people' : 'people-outline'}
+              size={size}
+              color={color}
+            />
           ),
           href: user?.role === 'admin' ? '/(tabs)/EmpleadosList' : null,
         }}
@@ -71,8 +82,12 @@ export default function TabLayout() {
         name="Logout"
         options={{
           title: 'Logout',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="log-out" size={size} color={color} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name={focused ? 'log-out' : 'log-out-outline'}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />

@@ -16,13 +16,25 @@ export default function ReservasLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Bookings',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="ReservaDetalle"
         options={{
-          title: 'Booking Details',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="GroupReservasList"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="GroupReservaDetalle"
+        options={{
+          headerShown: false,
         }}
       />
     </Stack>

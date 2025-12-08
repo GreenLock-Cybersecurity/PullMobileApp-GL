@@ -5,24 +5,18 @@ import { jwtDecode } from 'jwt-decode';
 export const authService = {
   login: async (email, password) => {
     try {
-      console.log('🔐 Attempting login:', email);
-      console.log('🌐 API Base URL:', apiClient.defaults.baseURL);
-      
       const response = await apiClient.post('/auth/login-workers', {
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password: password,
       });
 
-      console.log('✅ Login successful');
-
-      const { user, token } = response.data;
-
-      // Decodificar el JWT para obtener los IDs reales
+      const { employee, token } = response.data;
       const decodedToken = jwtDecode(token);
-      
-      // Crear un objeto user mejorado con los IDs reales del JWT
+
+      // Enhanced user object with real IDs from JWT
       const enhancedUser = {
-        ...user,
+        ...employee,
+        role: decodedToken.role || employee?.role,
         venue_id_real: decodedToken.venue_id,
         organization_id_real: decodedToken.organization_id,
         employee_id_real: decodedToken.employee_id,
@@ -35,15 +29,9 @@ export const authService = {
         data: { user: enhancedUser, token },
       };
     } catch (error) {
-      console.error('❌ Login error:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      });
-      
       return {
         success: false,
-        error: error.response?.data?.error || error.message || 'Login failed',
+        error: error.response?.data?.error || 'Login failed',
       };
     }
   },
@@ -67,9 +55,29 @@ export const authService = {
   verifyToken: async () => {
     try {
       const response = await apiClient.get('/auth/verify-token');
+
+      // Handle JWT tokens (for staff) - backend returns claims, not user
+      if (response.data.type === 'jwt' && response.data.claims) {
+        const claims = response.data.claims;
+        return {
+          success: true,
+          data: {
+            id: claims.employee_id,
+            email: claims.email,
+            role: claims.role,
+            venue_id: claims.venue_id,
+            organization_id: claims.organization_id,
+            venue_id_real: claims.venue_id,
+            organization_id_real: claims.organization_id,
+            employee_id_real: claims.employee_id,
+          },
+        };
+      }
+
+      // Handle user sessions - backend returns user_id
       return {
         success: true,
-        data: response.data.user,
+        data: response.data.user || null,
       };
     } catch (error) {
       return {

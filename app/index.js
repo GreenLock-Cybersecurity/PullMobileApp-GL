@@ -1,18 +1,15 @@
-// app/index.js
-import { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
+import { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
   Alert,
   StyleSheet,
-  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Dimensions,
-  Image
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -23,6 +20,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { OptimizedBackground, Logo, preloadImages } from '@/components/OptimizedImage';
+
+const LOGO_SOURCE = require('../assets/logo.png');
+const BACKGROUND_SOURCE = require('../assets/fondo.webp');
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -84,8 +85,8 @@ export default function Login() {
   };
 
   return (
-    <ImageBackground
-      source={require('../assets/fondo.png')}
+    <OptimizedBackground
+      source={BACKGROUND_SOURCE}
       style={styles.background}
       blurRadius={24}
     >
@@ -102,10 +103,9 @@ export default function Login() {
           <View style={styles.cardContainer}>
             <BlurView intensity={80} tint="dark" style={styles.card}>
               <View style={styles.logoContainer}>
-                <Image 
-                  source={require('../assets/logo.png')} 
-                  style={styles.logo} 
-                  resizeMode="contain" 
+                <Logo
+                  source={LOGO_SOURCE}
+                  style={styles.logo}
                 />
               </View>
 
@@ -212,7 +212,7 @@ export default function Login() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </ImageBackground>
+    </OptimizedBackground>
   );
 }
 

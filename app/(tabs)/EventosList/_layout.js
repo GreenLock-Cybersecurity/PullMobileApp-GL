@@ -15,20 +15,19 @@ export default function EventosLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Events',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="EventoDetalle"
         options={{
-          title: 'Event Details',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="EventoNuevo"
         options={{
-          title: 'New Event',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
     </Stack>

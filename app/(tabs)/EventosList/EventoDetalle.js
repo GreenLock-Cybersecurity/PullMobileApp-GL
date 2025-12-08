@@ -1,10 +1,9 @@
 // app/(tabs)/EventosList/EventoDetalle.js - COMPLETO CORREGIDO
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useLayoutEffect } from 'react';
 import {
   View,
   Text,
   Image,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
@@ -19,13 +18,21 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useDataStore } from '@/store/useDataStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import CustomHeader from '@/components/CustomHeader';
+import * as ticketTypeService from '@/services/ticketTypeService';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadService } from '@/services/uploadService';
+
+// Header content height (without safe area inset)
+const HEADER_CONTENT_HEIGHT = 56;
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 768;
@@ -33,7 +40,24 @@ const isSmallScreen = width < 768;
 export default function EventoDetalle() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const navigation = useNavigation();
   const user = useAuthStore((state) => state.user);
+  const insets = useSafeAreaInsets();
+
+  // Dynamic header height based on device safe area
+  const headerHeight = insets.top + HEADER_CONTENT_HEIGHT;
+
+  // Hide tab bar when this screen is focused
+  useLayoutEffect(() => {
+    navigation.getParent()?.setOptions({
+      tabBarStyle: { display: 'none' },
+    });
+    return () => {
+      navigation.getParent()?.setOptions({
+        tabBarStyle: undefined,
+      });
+    };
+  }, [navigation]);
 
   const {
     currentEvent,
@@ -58,13 +82,48 @@ export default function EventoDetalle() {
     ticket_limit: '',
     dress_code: '',
     min_age: '',
-    vip_enabled: false,
     custom_location: '',
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  // Image picker state
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // Ticket types state
+  const [isTicketTypesModalVisible, setIsTicketTypesModalVisible] = useState(false);
+  const [ticketTypes, setTicketTypes] = useState([]);
+  const [isLoadingTicketTypes, setIsLoadingTicketTypes] = useState(false);
+  const [editingTicketType, setEditingTicketType] = useState(null);
+  const [ticketTypeForm, setTicketTypeForm] = useState({
+    name: '',
+    price: '',
+    initialQuantity: '',
+    benefits: '',
+    expenses: '',
+    isGroup: false,
+    minQuantity: '',
+    maxQuantity: '',
+    hasGenderPricing: false,
+    malePrice: '',
+    femalePrice: '',
+  });
+  const [isSavingTicketType, setIsSavingTicketType] = useState(false);
+  const FEE_PERCENTAGE = 11.2;
+
+  // Currency helper function
+  const getCurrencySymbol = (currency) => {
+    const symbols = {
+      'GTQ': 'Q',
+      'USD': '$',
+      'EUR': '€',
+      'MXN': '$',
+    };
+    return symbols[currency] || currency || 'Q';
+  };
 
   useEffect(() => {
     if (id) {
@@ -87,11 +146,130 @@ export default function EventoDetalle() {
         ticket_limit: currentEvent.ticket_limit?.toString() || '',
         dress_code: currentEvent.dress_code || '',
         min_age: currentEvent.min_age?.toString() || '18',
-        vip_enabled: currentEvent.vip_enabled || false,
         custom_location: currentEvent.custom_location || '',
       });
     }
   }, [currentEvent, isEditModalVisible]);
+
+  // Load ticket types when ticket types modal opens
+  useEffect(() => {
+    if (isTicketTypesModalVisible && id) {
+      loadTicketTypes();
+    }
+  }, [isTicketTypesModalVisible, id]);
+
+  const loadTicketTypes = async () => {
+    setIsLoadingTicketTypes(true);
+    try {
+      const response = await ticketTypeService.getTicketTypesByEvent(id);
+      setTicketTypes(response.data || []);
+    } catch {
+      setTicketTypes([]);
+    } finally {
+      setIsLoadingTicketTypes(false);
+    }
+  };
+
+  const resetTicketTypeForm = () => {
+    setTicketTypeForm({
+      name: '',
+      price: '',
+      initialQuantity: '',
+      benefits: '',
+      expenses: '',
+      isGroup: false,
+      minQuantity: '',
+      maxQuantity: '',
+      hasGenderPricing: false,
+      malePrice: '',
+      femalePrice: '',
+    });
+    setEditingTicketType(null);
+  };
+
+  const handleEditTicketType = (ticket) => {
+    setEditingTicketType(ticket.id);
+    setTicketTypeForm({
+      name: ticket.name || '',
+      price: ticket.basePrice?.toString() || ticket.price?.toString() || '',
+      initialQuantity: ticket.initialQuantity?.toString() || '',
+      benefits: ticket.benefits || '',
+      expenses: ticket.expenses?.toString() || '',
+      isGroup: ticket.isGroup || false,
+      minQuantity: ticket.minQuantity?.toString() || '',
+      maxQuantity: ticket.maxQuantity?.toString() || '',
+      hasGenderPricing: ticket.hasGenderPricing || false,
+      malePrice: ticket.malePrice?.toString() || '',
+      femalePrice: ticket.femalePrice?.toString() || '',
+    });
+  };
+
+  const handleSaveTicketType = async () => {
+    if (!ticketTypeForm.name || !ticketTypeForm.price || !ticketTypeForm.initialQuantity) {
+      Alert.alert('Error', 'Name, price and initial quantity are required');
+      return;
+    }
+
+    if (ticketTypeForm.hasGenderPricing && (!ticketTypeForm.malePrice || !ticketTypeForm.femalePrice)) {
+      Alert.alert('Error', 'Male and female prices are required for gender-based pricing');
+      return;
+    }
+
+    setIsSavingTicketType(true);
+    try {
+      const data = {
+        name: ticketTypeForm.name,
+        price: parseFloat(ticketTypeForm.price),
+        initialQuantity: parseInt(ticketTypeForm.initialQuantity),
+        benefits: ticketTypeForm.benefits || null,
+        expenses: ticketTypeForm.expenses ? parseFloat(ticketTypeForm.expenses) : null,
+        isGroup: ticketTypeForm.isGroup,
+        minQuantity: ticketTypeForm.minQuantity ? parseInt(ticketTypeForm.minQuantity) : null,
+        maxQuantity: ticketTypeForm.maxQuantity ? parseInt(ticketTypeForm.maxQuantity) : null,
+        hasGenderPricing: ticketTypeForm.hasGenderPricing,
+        malePrice: ticketTypeForm.malePrice ? parseFloat(ticketTypeForm.malePrice) : null,
+        femalePrice: ticketTypeForm.femalePrice ? parseFloat(ticketTypeForm.femalePrice) : null,
+      };
+
+      if (editingTicketType) {
+        await ticketTypeService.updateTicketType(editingTicketType, data);
+        Alert.alert('Success', 'Ticket type updated');
+      } else {
+        await ticketTypeService.createTicketType(id, data);
+        Alert.alert('Success', 'Ticket type created');
+      }
+
+      resetTicketTypeForm();
+      loadTicketTypes();
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.error || 'Failed to save ticket type');
+    } finally {
+      setIsSavingTicketType(false);
+    }
+  };
+
+  const handleDeleteTicketType = (ticketId, ticketName) => {
+    Alert.alert(
+      'Delete Ticket Type',
+      `Are you sure you want to delete "${ticketName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await ticketTypeService.deleteTicketType(ticketId);
+              Alert.alert('Success', 'Ticket type deleted');
+              loadTicketTypes();
+            } catch (error) {
+              Alert.alert('Error', error.response?.data?.error || 'Failed to delete ticket type');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const onRefresh = () => {
     if (id) {
@@ -109,32 +287,108 @@ export default function EventoDetalle() {
     });
   };
 
+  // Pick image from gallery for edit
+  const pickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please allow access to your photo library to select an event image.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const imageAsset = result.assets[0];
+
+        const validation = uploadService.validateImage(imageAsset);
+        if (!validation.valid) {
+          Alert.alert('Invalid Image', validation.error);
+          return;
+        }
+
+        setSelectedImage(imageAsset);
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  // Remove selected image and revert to original
+  const removeImage = () => {
+    Alert.alert(
+      'Remove Image',
+      'Are you sure you want to remove the selected image?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => setSelectedImage(null),
+        },
+      ]
+    );
+  };
+
   const handleEditSubmit = async () => {
     if (!editForm.name || !editForm.event_date || !editForm.start_time || !editForm.end_time) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
-    const result = await updateEvent(id, {
-      name: editForm.name,
-      description: editForm.description,
-      image: editForm.image,
-      event_date: editForm.event_date,
-      start_time: editForm.start_time,
-      end_time: editForm.end_time,
-      ticket_limit: editForm.ticket_limit ? parseInt(editForm.ticket_limit) : 0,
-      dress_code: editForm.dress_code,
-      min_age: editForm.min_age ? parseInt(editForm.min_age) : 18,
-      vip_enabled: editForm.vip_enabled,
-      custom_location: editForm.custom_location,
-    });
+    setIsUploadingImage(true);
 
-    if (result.success) {
-      Alert.alert('Success', 'Event updated successfully');
-      setIsEditModalVisible(false);
-      onRefresh();
-    } else {
-      Alert.alert('Error', result.error || 'Failed to update event');
+    try {
+      let imageUrl = editForm.image;
+
+      // If a new image was selected, upload it first
+      if (selectedImage) {
+        const uploadResult = await uploadService.uploadEventImage(selectedImage.uri);
+
+        if (!uploadResult.success) {
+          Alert.alert('Upload Error', uploadResult.error || 'Failed to upload image');
+          setIsUploadingImage(false);
+          return;
+        }
+
+        imageUrl = uploadResult.data.url;
+      }
+
+      setIsUploadingImage(false);
+
+      const result = await updateEvent(id, {
+        name: editForm.name,
+        description: editForm.description,
+        image: imageUrl,
+        event_date: editForm.event_date,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time,
+        ticket_limit: editForm.ticket_limit ? parseInt(editForm.ticket_limit) : 0,
+        dress_code: editForm.dress_code,
+        min_age: editForm.min_age ? parseInt(editForm.min_age) : 18,
+        custom_location: editForm.custom_location,
+      });
+
+      if (result.success) {
+        Alert.alert('Success', 'Event updated successfully');
+        setIsEditModalVisible(false);
+        setSelectedImage(null);
+        onRefresh();
+      } else {
+        Alert.alert('Error', result.error || 'Failed to update event');
+      }
+    } catch {
+      Alert.alert('Error', 'An unexpected error occurred');
+      setIsUploadingImage(false);
     }
   };
 
@@ -201,7 +455,7 @@ export default function EventoDetalle() {
   if (isLoadingEventDetail) {
     return (
       <ImageBackground
-        source={require('../../../assets/fondo.png')}
+        source={require('../../../assets/fondo.webp')}
         style={styles.background}
         blurRadius={20}
       >
@@ -219,7 +473,7 @@ export default function EventoDetalle() {
   if (eventDetailError) {
     return (
       <ImageBackground
-        source={require('../../../assets/fondo.png')}
+        source={require('../../../assets/fondo.webp')}
         style={styles.background}
         blurRadius={20}
       >
@@ -250,7 +504,7 @@ export default function EventoDetalle() {
   if (!currentEvent) {
     return (
       <ImageBackground
-        source={require('../../../assets/fondo.png')}
+        source={require('../../../assets/fondo.webp')}
         style={styles.background}
         blurRadius={20}
       >
@@ -281,7 +535,7 @@ export default function EventoDetalle() {
 
   const backgroundImage = currentEvent.event_img 
     ? { uri: currentEvent.event_img }
-    : require('../../../assets/fondo.png');
+    : require('../../../assets/fondo.webp');
 
   return (
     <ImageBackground
@@ -290,19 +544,19 @@ export default function EventoDetalle() {
       blurRadius={20}
     >
       <View style={styles.overlayLight} />
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoadingEventDetail}
-              onRefresh={onRefresh}
-              tintColor="rgba(139, 92, 246, 0.9)"
-            />
-          }
-        >
+      <CustomHeader showBackButton />
+      <ScrollView
+        style={[styles.scrollView, { paddingTop: headerHeight }]}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoadingEventDetail}
+            onRefresh={onRefresh}
+            tintColor="rgba(139, 92, 246, 0.9)"
+          />
+        }
+      >
           <Text style={styles.eventTitle}>{currentEvent.event_name}</Text>
 
           <View style={isSmallScreen ? styles.contentMobile : styles.contentDesktop}>
@@ -377,15 +631,6 @@ export default function EventoDetalle() {
                   </View>
                 )}
 
-                <View style={[styles.detailRow, styles.detailRowLast]}>
-                  <View style={styles.detailLabelContainer}>
-                    <Ionicons name="star-outline" size={18} color="rgba(249, 115, 22, 0.9)" />
-                    <Text style={styles.detailLabel}>VIP Enabled</Text>
-                  </View>
-                  <Text style={styles.detailValue}>
-                    {currentEvent.vip_enabled ? 'Yes' : 'No'}
-                  </Text>
-                </View>
               </View>
             </BlurView>
           </View>
@@ -402,35 +647,47 @@ export default function EventoDetalle() {
           )}
         </ScrollView>
 
-        {user?.role === 'staff' && (
+      {user?.role === 'admin' && (
+        <View style={[styles.fabContainer, { bottom: insets.bottom + 16 }]}>
           <TouchableOpacity
             style={styles.fab}
             onPress={() => setIsEditModalVisible(true)}
             activeOpacity={0.8}
           >
-            <LinearGradient
-              colors={['rgba(139, 92, 246, 0.9)', 'rgba(217, 70, 239, 0.9)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.fabGradient}
-            >
-              <Ionicons name="pencil" size={24} color="white" />
-            </LinearGradient>
+            <BlurView intensity={80} tint="dark" style={styles.fabBlur}>
+              <LinearGradient
+                colors={['rgba(139, 92, 246, 0.3)', 'rgba(217, 70, 239, 0.2)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fabGradient}
+              >
+                <View style={styles.fabInner}>
+                  <Ionicons name="pencil" size={20} color="white" />
+                  <Text style={styles.fabText}>Edit Event</Text>
+                </View>
+              </LinearGradient>
+            </BlurView>
           </TouchableOpacity>
-        )}
+        </View>
+      )}
 
         <Modal
           visible={isEditModalVisible}
           animationType="slide"
-          transparent={true}
+          transparent={false}
           onRequestClose={() => setIsEditModalVisible(false)}
         >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ flex: 1 }}
+          <ImageBackground
+            source={require('../../../assets/fondo.webp')}
+            style={{ flex: 1, backgroundColor: '#0a0a0f' }}
+            blurRadius={15}
           >
-            <View style={styles.modalOverlay}>
-              <BlurView intensity={90} tint="dark" style={styles.modalContainer}>
+            <View style={styles.overlay} />
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ flex: 1 }}
+            >
+              <BlurView intensity={60} tint="dark" style={styles.modalContainerFull}>
                 <View style={styles.modalContent}>
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>Edit Event</Text>
@@ -467,16 +724,75 @@ export default function EventoDetalle() {
                       />
                     </View>
 
+                    {/* Event Image Picker */}
                     <View style={styles.formGroup}>
-                      <Text style={styles.label}>Image URL</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={editForm.image}
-                        onChangeText={(text) => setEditForm({ ...editForm, image: text })}
-                        placeholder="https://example.com/image.jpg"
-                        placeholderTextColor="rgba(255, 255, 255, 0.3)"
-                        autoCapitalize="none"
-                      />
+                      <Text style={styles.label}>Event Image</Text>
+
+                      {selectedImage ? (
+                        // New image selected - show preview
+                        <View style={styles.imagePreviewContainer}>
+                          <Image
+                            source={{ uri: selectedImage.uri }}
+                            style={styles.imagePreview}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.imageOverlay}>
+                            <TouchableOpacity
+                              style={styles.changeImageBtn}
+                              onPress={pickImage}
+                            >
+                              <Ionicons name="camera" size={20} color="white" />
+                              <Text style={styles.changeImageText}>Change</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.removeImageBtn}
+                              onPress={removeImage}
+                            >
+                              <Ionicons name="trash" size={20} color="white" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : editForm.image ? (
+                        // Existing image - show current image with option to change
+                        <View style={styles.imagePreviewContainer}>
+                          <Image
+                            source={{ uri: editForm.image }}
+                            style={styles.imagePreview}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.imageOverlay}>
+                            <TouchableOpacity
+                              style={styles.changeImageBtn}
+                              onPress={pickImage}
+                            >
+                              <Ionicons name="camera" size={20} color="white" />
+                              <Text style={styles.changeImageText}>Change</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        // No image - show picker button
+                        <TouchableOpacity
+                          style={styles.imagePickerButton}
+                          onPress={pickImage}
+                          activeOpacity={0.8}
+                        >
+                          <LinearGradient
+                            colors={['rgba(139, 92, 246, 0.15)', 'rgba(217, 70, 239, 0.15)']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={StyleSheet.absoluteFill}
+                          />
+                          <View style={styles.imagePickerContent}>
+                            <View style={styles.imagePickerIconCircle}>
+                              <Ionicons name="image-outline" size={32} color="rgba(167, 139, 250, 0.9)" />
+                            </View>
+                            <Text style={styles.imagePickerTitle}>Select Event Image</Text>
+                            <Text style={styles.imagePickerSubtitle}>Tap to choose from gallery</Text>
+                            <Text style={styles.imagePickerHint}>JPEG, PNG or WebP - Max 10MB</Text>
+                          </View>
+                        </TouchableOpacity>
+                      )}
                     </View>
 
                     <View style={styles.formGroup}>
@@ -579,20 +895,6 @@ export default function EventoDetalle() {
                     </View>
 
                     <View style={styles.formGroup}>
-                      <View style={styles.switchContainer}>
-                        <Text style={styles.label}>VIP Enabled</Text>
-                        <Switch
-                          value={editForm.vip_enabled}
-                          onValueChange={(value) =>
-                            setEditForm({ ...editForm, vip_enabled: value })
-                          }
-                          trackColor={{ false: '#444', true: 'rgba(139, 92, 246, 0.6)' }}
-                          thumbColor={editForm.vip_enabled ? 'rgba(139, 92, 246, 0.9)' : '#888'}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.formGroup}>
                       <Text style={styles.label}>Custom Location</Text>
                       <TextInput
                         style={styles.input}
@@ -603,55 +905,408 @@ export default function EventoDetalle() {
                       />
                     </View>
 
+                    {/* TICKET TYPES BUTTON */}
                     <TouchableOpacity
-                      style={styles.submitButtonContainer}
-                      onPress={handleEditSubmit}
-                      disabled={isUpdatingEvent}
+                      style={styles.manageTicketsBtn}
+                      onPress={() => {
+                        setIsEditModalVisible(false);
+                        setTimeout(() => setIsTicketTypesModalVisible(true), 300);
+                      }}
                       activeOpacity={0.8}
                     >
                       <LinearGradient
-                        colors={['rgba(139, 92, 246, 0.9)', 'rgba(217, 70, 239, 0.9)']}
+                        colors={['rgba(34, 211, 238, 0.2)', 'rgba(139, 92, 246, 0.2)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
-                        style={styles.submitButton}
+                        style={styles.manageTicketsBtnGradient}
                       >
-                        {isUpdatingEvent ? (
-                          <ActivityIndicator color="white" />
-                        ) : (
-                          <Text style={styles.submitButtonText}>Update Event</Text>
-                        )}
+                        <Ionicons name="ticket-outline" size={22} color="rgba(34, 211, 238, 0.9)" />
+                        <Text style={styles.manageTicketsBtnText}>Manage Ticket Types</Text>
+                        <Ionicons name="chevron-forward" size={20} color="rgba(255, 255, 255, 0.6)" />
                       </LinearGradient>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.deleteButtonContainer}
+                      onPress={handleEditSubmit}
+                      disabled={isUpdatingEvent || isUploadingImage}
+                      activeOpacity={0.8}
+                      style={styles.glassButtonContainer}
+                    >
+                      <BlurView intensity={50} tint="dark" style={styles.glassButtonBlur}>
+                        <LinearGradient
+                          colors={['rgba(139, 92, 246, 0.25)', 'rgba(217, 70, 239, 0.25)']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.glassButton}
+                        >
+                          {isUploadingImage ? (
+                            <>
+                              <ActivityIndicator color="rgba(139, 92, 246, 1)" />
+                              <Text style={[styles.glassButtonText, { color: 'rgba(196, 181, 253, 1)' }]}>Uploading Image...</Text>
+                            </>
+                          ) : isUpdatingEvent ? (
+                            <>
+                              <ActivityIndicator color="rgba(139, 92, 246, 1)" />
+                              <Text style={[styles.glassButtonText, { color: 'rgba(196, 181, 253, 1)' }]}>Updating Event...</Text>
+                            </>
+                          ) : (
+                            <>
+                              <Ionicons name="checkmark-circle-outline" size={20} color="rgba(139, 92, 246, 1)" />
+                              <Text style={[styles.glassButtonText, { color: 'rgba(196, 181, 253, 1)' }]}>Update Event</Text>
+                            </>
+                          )}
+                        </LinearGradient>
+                      </BlurView>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       onPress={handleDelete}
                       disabled={isDeletingEvent}
                       activeOpacity={0.8}
+                      style={[styles.glassButtonContainer, { marginBottom: 30 }]}
                     >
-                      <LinearGradient
-                        colors={['rgba(239, 68, 68, 0.9)', 'rgba(220, 38, 38, 0.9)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.deleteButton}
-                      >
-                        {isDeletingEvent ? (
-                          <ActivityIndicator color="white" />
-                        ) : (
-                          <>
-                            <Ionicons name="trash-outline" size={20} color="white" />
-                            <Text style={styles.deleteButtonText}>Delete Event</Text>
-                          </>
-                        )}
-                      </LinearGradient>
+                      <BlurView intensity={50} tint="dark" style={styles.glassButtonBlur}>
+                        <LinearGradient
+                          colors={['rgba(239, 68, 68, 0.2)', 'rgba(220, 38, 38, 0.2)']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={[styles.glassButton, { borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+                        >
+                          {isDeletingEvent ? (
+                            <ActivityIndicator color="rgba(239, 68, 68, 1)" />
+                          ) : (
+                            <>
+                              <Ionicons name="trash-outline" size={20} color="rgba(239, 68, 68, 0.9)" />
+                              <Text style={[styles.glassButtonText, { color: 'rgba(252, 165, 165, 1)' }]}>Delete Event</Text>
+                            </>
+                          )}
+                        </LinearGradient>
+                      </BlurView>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
               </BlurView>
-            </View>
+            </KeyboardAvoidingView>
+          </ImageBackground>
+      </Modal>
+
+      {/* TICKET TYPES MODAL */}
+      <Modal
+        visible={isTicketTypesModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          setIsTicketTypesModalVisible(false);
+          resetTicketTypeForm();
+          setTimeout(() => setIsEditModalVisible(true), 300);
+        }}
+      >
+        <ImageBackground
+          source={require('../../../assets/fondo.webp')}
+          style={{ flex: 1 }}
+          blurRadius={15}
+        >
+          <View style={styles.overlay} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
+            <BlurView intensity={60} tint="dark" style={styles.modalContainerFull}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsTicketTypesModalVisible(false);
+                      resetTicketTypeForm();
+                      setTimeout(() => setIsEditModalVisible(true), 300);
+                    }}
+                    style={styles.backButton}
+                  >
+                    <Ionicons name="arrow-back" size={24} color="white" />
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>Ticket Types</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsTicketTypesModalVisible(false);
+                      resetTicketTypeForm();
+                    }}
+                    style={styles.closeButton}
+                  >
+                    <Ionicons name="close" size={24} color="white" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+                  {/* Fee Notice */}
+                  <View style={styles.feeNotice}>
+                    <Ionicons name="information-circle" size={18} color="rgba(34, 211, 238, 0.9)" />
+                    <Text style={styles.feeNoticeText}>
+                      A {FEE_PERCENTAGE}% platform fee will be added to all prices
+                    </Text>
+                  </View>
+
+                  {/* Existing Ticket Types List */}
+                  {isLoadingTicketTypes ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="large" color="rgba(139, 92, 246, 0.9)" />
+                    </View>
+                  ) : ticketTypes.length > 0 ? (
+                    <View style={styles.ticketTypesList}>
+                      {ticketTypes.map((ticket) => {
+                        const currencySymbol = getCurrencySymbol(ticket.currency || currentEvent?.currency);
+                        return (
+                          <BlurView key={ticket.id} intensity={40} tint="dark" style={styles.ticketTypeItemBlur}>
+                            <View style={styles.ticketTypeItem}>
+                              <View style={styles.ticketTypeInfo}>
+                                <Text style={styles.ticketTypeName}>{ticket.name}</Text>
+                                <Text style={styles.ticketTypeDetails}>
+                                  {currencySymbol}{ticket.price?.toFixed(2)} ({ticket.availableQuantity}/{ticket.initialQuantity} available)
+                                </Text>
+                                {ticket.isGroup && (
+                                  <View style={styles.ticketTypeBadges}>
+                                    <View style={styles.ticketTypeBadge}>
+                                      <Text style={styles.ticketTypeBadgeText}>
+                                        Group: {ticket.minQuantity}-{ticket.maxQuantity}
+                                      </Text>
+                                    </View>
+                                    {ticket.hasGenderPricing && (
+                                      <View style={[styles.ticketTypeBadge, { backgroundColor: 'rgba(232, 121, 249, 0.2)' }]}>
+                                        <Text style={[styles.ticketTypeBadgeText, { color: 'rgba(232, 121, 249, 0.9)' }]}>
+                                          M: {currencySymbol}{ticket.malePrice?.toFixed(2)} / F: {currencySymbol}{ticket.femalePrice?.toFixed(2)}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                )}
+                              </View>
+                              <View style={styles.ticketTypeActions}>
+                                <TouchableOpacity
+                                  onPress={() => handleEditTicketType(ticket)}
+                                  activeOpacity={0.7}
+                                >
+                                  <BlurView intensity={60} tint="dark" style={styles.ticketTypeActionBtnBlur}>
+                                    <View style={styles.ticketTypeActionBtnInner}>
+                                      <Ionicons name="pencil" size={16} color="rgba(139, 92, 246, 0.9)" />
+                                    </View>
+                                  </BlurView>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => handleDeleteTicketType(ticket.id, ticket.name)}
+                                  activeOpacity={0.7}
+                                >
+                                  <BlurView intensity={60} tint="dark" style={styles.ticketTypeActionBtnBlur}>
+                                    <View style={[styles.ticketTypeActionBtnInner, { borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+                                      <Ionicons name="trash" size={16} color="rgba(239, 68, 68, 0.9)" />
+                                    </View>
+                                  </BlurView>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </BlurView>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <View style={styles.emptyTicketTypes}>
+                      <Ionicons name="ticket-outline" size={48} color="rgba(255, 255, 255, 0.2)" />
+                      <Text style={styles.emptyTicketTypesText}>No ticket types yet</Text>
+                    </View>
+                  )}
+
+                  {/* Ticket Type Form */}
+                  <View style={styles.ticketTypeForm}>
+                    <Text style={styles.ticketTypeFormTitle}>
+                      {editingTicketType ? 'Edit Ticket Type' : 'Add New Ticket Type'}
+                    </Text>
+
+                    <View style={styles.formRow}>
+                      <View style={[styles.formGroup, { flex: 2 }]}>
+                        <Text style={styles.label}>Name *</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={ticketTypeForm.name}
+                          onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, name: text })}
+                          placeholder="e.g., General, VIP"
+                          placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                        />
+                      </View>
+                      <View style={[styles.formGroup, { flex: 1 }]}>
+                        <Text style={styles.label}>Base Price *</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={ticketTypeForm.price}
+                          onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, price: text })}
+                          placeholder="0.00"
+                          placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.formRow}>
+                      <View style={[styles.formGroup, { flex: 1 }]}>
+                        <Text style={styles.label}>Initial Qty *</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={ticketTypeForm.initialQuantity}
+                          onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, initialQuantity: text })}
+                          placeholder="100"
+                          placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                          keyboardType="number-pad"
+                        />
+                      </View>
+                      <View style={[styles.formGroup, { flex: 2 }]}>
+                        <Text style={styles.label}>Benefits</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={ticketTypeForm.benefits}
+                          onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, benefits: text })}
+                          placeholder="VIP access, drinks..."
+                          placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Internal Expenses (cost per ticket)</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={ticketTypeForm.expenses}
+                        onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, expenses: text })}
+                        placeholder="Cost tracking (not shown to users)"
+                        placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+
+                    <View style={styles.switchRow}>
+                      <Text style={styles.label}>Group Ticket</Text>
+                      <Switch
+                        value={ticketTypeForm.isGroup}
+                        onValueChange={(value) => setTicketTypeForm({ ...ticketTypeForm, isGroup: value, hasGenderPricing: false })}
+                        trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: 'rgba(139, 92, 246, 0.5)' }}
+                        thumbColor={ticketTypeForm.isGroup ? 'rgba(139, 92, 246, 1)' : 'rgba(255, 255, 255, 0.8)'}
+                      />
+                    </View>
+
+                    {ticketTypeForm.isGroup && (
+                      <>
+                        <View style={styles.formRow}>
+                          <View style={[styles.formGroup, { flex: 1 }]}>
+                            <Text style={styles.label}>Min People</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={ticketTypeForm.minQuantity}
+                              onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, minQuantity: text })}
+                              placeholder="2"
+                              placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                              keyboardType="number-pad"
+                            />
+                          </View>
+                          <View style={[styles.formGroup, { flex: 1 }]}>
+                            <Text style={styles.label}>Max People</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={ticketTypeForm.maxQuantity}
+                              onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, maxQuantity: text })}
+                              placeholder="10"
+                              placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                              keyboardType="number-pad"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.switchRow}>
+                          <View>
+                            <Text style={styles.label}>Gender-Based Pricing</Text>
+                            <Text style={styles.labelSubtext}>Different prices for male/female</Text>
+                          </View>
+                          <Switch
+                            value={ticketTypeForm.hasGenderPricing}
+                            onValueChange={(value) => setTicketTypeForm({ ...ticketTypeForm, hasGenderPricing: value })}
+                            trackColor={{ false: 'rgba(255, 255, 255, 0.1)', true: 'rgba(232, 121, 249, 0.5)' }}
+                            thumbColor={ticketTypeForm.hasGenderPricing ? 'rgba(232, 121, 249, 1)' : 'rgba(255, 255, 255, 0.8)'}
+                          />
+                        </View>
+
+                        {ticketTypeForm.hasGenderPricing && (
+                          <View style={styles.formRow}>
+                            <View style={[styles.formGroup, { flex: 1 }]}>
+                              <Text style={styles.label}>Male Price *</Text>
+                              <TextInput
+                                style={styles.input}
+                                value={ticketTypeForm.malePrice}
+                                onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, malePrice: text })}
+                                placeholder="0.00"
+                                placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                                keyboardType="decimal-pad"
+                              />
+                            </View>
+                            <View style={[styles.formGroup, { flex: 1 }]}>
+                              <Text style={styles.label}>Female Price *</Text>
+                              <TextInput
+                                style={styles.input}
+                                value={ticketTypeForm.femalePrice}
+                                onChangeText={(text) => setTicketTypeForm({ ...ticketTypeForm, femalePrice: text })}
+                                placeholder="0.00"
+                                placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                                keyboardType="decimal-pad"
+                              />
+                            </View>
+                          </View>
+                        )}
+                      </>
+                    )}
+
+                    <View style={styles.ticketTypeFormButtons}>
+                      {editingTicketType && (
+                        <TouchableOpacity
+                          onPress={resetTicketTypeForm}
+                          activeOpacity={0.8}
+                          style={styles.glassButtonContainerSmall}
+                        >
+                          <BlurView intensity={50} tint="dark" style={styles.glassButtonBlur}>
+                            <View style={[styles.glassButtonSmall, { borderColor: 'rgba(255, 255, 255, 0.15)' }]}>
+                              <Ionicons name="close-outline" size={18} color="rgba(255, 255, 255, 0.7)" />
+                              <Text style={[styles.glassButtonTextSmall, { color: 'rgba(255, 255, 255, 0.7)' }]}>Cancel</Text>
+                            </View>
+                          </BlurView>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={handleSaveTicketType}
+                        disabled={isSavingTicketType}
+                        activeOpacity={0.8}
+                        style={[styles.glassButtonContainerSmall, { flex: editingTicketType ? 1 : 2 }]}
+                      >
+                        <BlurView intensity={50} tint="dark" style={styles.glassButtonBlur}>
+                          <LinearGradient
+                            colors={['rgba(52, 211, 153, 0.25)', 'rgba(16, 185, 129, 0.25)']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={[styles.glassButtonSmall, { borderColor: 'rgba(52, 211, 153, 0.3)' }]}
+                          >
+                            {isSavingTicketType ? (
+                              <ActivityIndicator color="rgba(52, 211, 153, 1)" size="small" />
+                            ) : (
+                              <>
+                                <Ionicons name={editingTicketType ? 'checkmark' : 'add'} size={18} color="rgba(52, 211, 153, 1)" />
+                                <Text style={[styles.glassButtonTextSmall, { color: 'rgba(167, 243, 208, 1)' }]}>
+                                  {editingTicketType ? 'Update' : 'Add Ticket Type'}
+                                </Text>
+                              </>
+                            )}
+                          </LinearGradient>
+                        </BlurView>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </ScrollView>
+              </View>
+            </BlurView>
           </KeyboardAvoidingView>
-        </Modal>
-      </SafeAreaView>
+        </ImageBackground>
+      </Modal>
     </ImageBackground>
   );
 }
@@ -661,9 +1316,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0f',
   },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
   overlayLight: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
     padding: 16,
@@ -784,25 +1446,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '400',
   },
-  fab: {
+  fabContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    right: 16,
+    zIndex: 100,
+  },
+  fab: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 12,
+    shadowColor: 'rgba(139, 92, 246, 0.5)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+  },
+  fabBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   fabGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 28,
-    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  fabInner: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    backgroundColor: 'rgba(15, 15, 25, 0.4)',
+  },
+  fabText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   modalOverlay: {
     flex: 1,
@@ -814,6 +1493,16 @@ const styles = StyleSheet.create({
     marginTop: 60,
     borderRadius: 20,
     overflow: 'hidden',
+  },
+  modalContainerFull: {
+    flex: 1,
+    marginTop: 50,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   modalContent: {
     flex: 1,
@@ -836,6 +1525,9 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   closeButton: {
+    padding: 4,
+  },
+  backButton: {
     padding: 4,
   },
   modalForm: {
@@ -948,5 +1640,353 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 14,
     fontWeight: '300',
+  },
+  // Ticket Types Styles
+  ticketTypesSection: {
+    marginTop: 8,
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.2)',
+  },
+  ticketTypesSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  ticketTypesSectionTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  ticketTypesList: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  ticketTypeItemBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 0,
+  },
+  ticketTypeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  ticketTypeInfo: {
+    flex: 1,
+  },
+  ticketTypeName: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  ticketTypeDetails: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 13,
+  },
+  ticketTypeGroup: {
+    color: 'rgba(139, 92, 246, 0.8)',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  ticketTypeActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ticketTypeActionBtn: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+  },
+  ticketTypeActionBtnBlur: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  ticketTypeActionBtnInner: {
+    width: 38,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  ticketTypeForm: {
+    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  ticketTypeFormTitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 16,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  ticketTypeFormButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelTicketBtn: {
+    flex: 1,
+    padding: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelTicketBtnText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  saveTicketBtn: {
+    flex: 2,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  saveTicketBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 12,
+  },
+  saveTicketBtnText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Manage Ticket Types Button
+  manageTicketsBtn: {
+    marginTop: 8,
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  manageTicketsBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.2)',
+  },
+  manageTicketsBtnText: {
+    flex: 1,
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '500',
+    marginLeft: 12,
+  },
+  // Fee Notice
+  feeNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.2)',
+    marginBottom: 20,
+  },
+  feeNoticeText: {
+    color: 'rgba(34, 211, 238, 0.9)',
+    fontSize: 13,
+    fontWeight: '400',
+    flex: 1,
+  },
+  // Loading Container
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Empty Ticket Types
+  emptyTicketTypes: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    marginBottom: 20,
+  },
+  emptyTicketTypesText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 15,
+    fontWeight: '300',
+    marginTop: 12,
+  },
+  // Ticket Type Badges
+  ticketTypeBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  ticketTypeBadge: {
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  ticketTypeBadgeText: {
+    color: 'rgba(139, 92, 246, 0.9)',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  // Label Subtext
+  labelSubtext: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12,
+    fontWeight: '300',
+    marginTop: 2,
+  },
+  // Glass Morphism Button Styles
+  glassButtonContainer: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  glassButtonBlur: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  glassButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  glassButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  glassButtonContainerSmall: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  glassButtonSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  glassButtonTextSmall: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Image Picker Styles
+  imagePickerButton: {
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    minHeight: 180,
+  },
+  imagePickerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+  },
+  imagePickerIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  imagePickerTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  imagePickerSubtitle: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  imagePickerHint: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12,
+  },
+  imagePreviewContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  changeImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(139, 92, 246, 0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  changeImageText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  removeImageBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
 });

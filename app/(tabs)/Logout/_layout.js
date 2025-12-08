@@ -15,7 +15,7 @@ export default function LogoutLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Logout',
+          headerShown: false,
         }}
       />
     </Stack>

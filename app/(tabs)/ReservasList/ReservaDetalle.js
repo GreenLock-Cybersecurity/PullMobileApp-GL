@@ -1,5 +1,5 @@
 // app/(tabs)/ReservasList/ReservaDetalle.js - COMPLETO CORREGIDO
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -14,21 +14,36 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useDataStore } from '@/store/useDataStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { orderService } from '@/services/orderService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import CustomHeader from '@/components/CustomHeader';
 
 const { width } = Dimensions.get('window');
 const isSmallScreen = width < 640;
+const HEADER_CONTENT_HEIGHT = 56;
 
 export default function ReservaDetalle() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { id } = useLocalSearchParams();
   const user = useAuthStore((state) => state.user);
+
+  // Hide tab bar when this screen is focused
+  useLayoutEffect(() => {
+    navigation.getParent()?.setOptions({
+      tabBarStyle: { display: 'none' },
+    });
+    return () => {
+      navigation.getParent()?.setOptions({
+        tabBarStyle: undefined,
+      });
+    };
+  }, [navigation]);
 
   const {
     currentOrder,
@@ -86,7 +101,7 @@ export default function ReservaDetalle() {
               );
 
               if (result.success) {
-                Alert.alert('Success', 'Order approved. Payment link sent to customer.', [
+                Alert.alert('Success', 'Order confirmed! Tickets with QR codes sent to customer.', [
                   {
                     text: 'OK',
                     onPress: () => router.back(),
@@ -142,18 +157,18 @@ export default function ReservaDetalle() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending_staff_approval':
-        return '#f59e0b';
       case 'pending':
-        return '#f59e0b';
-      case 'payment_authorized':
-        return '#3b82f6';
-      case 'completed':
-        return '#10b981';
-      case 'rejected':
-        return '#ef4444';
+        return '#f59e0b'; // Amber/Orange - awaiting approval
+      case 'confirmed':
+        return '#10b981'; // Green - approved, has QR
+      case 'checked_in':
+        return '#3b82f6'; // Blue - entered venue
       case 'cancelled':
-        return '#6b7280';
+        return '#6b7280'; // Gray - cancelled
+      case 'refunded':
+        return '#8b5cf6'; // Purple - refunded
+      case 'expired':
+        return '#ef4444'; // Red - expired/no-show
       default:
         return '#6b7280';
     }
@@ -161,12 +176,12 @@ export default function ReservaDetalle() {
 
   const getStatusDisplayName = (status) => {
     const statusMap = {
-      pending_staff_approval: 'Pending Approval',
-      pending: 'Pending Payment',
-      payment_authorized: 'Payment Authorized',
-      completed: 'Completed',
-      rejected: 'Rejected',
+      pending: 'Pending',
+      confirmed: 'Confirmed',
+      checked_in: 'Checked-In',
       cancelled: 'Cancelled',
+      refunded: 'Refunded',
+      expired: 'Expired',
     };
     return statusMap[status] || status;
   };
@@ -174,7 +189,7 @@ export default function ReservaDetalle() {
   if (isLoadingOrderDetail) {
     return (
       <ImageBackground
-        source={require('../../../assets/fondo.png')}
+        source={require('../../../assets/fondo.webp')}
         style={styles.background}
         blurRadius={15}
       >
@@ -192,7 +207,7 @@ export default function ReservaDetalle() {
   if (orderDetailError || !currentOrder) {
     return (
       <ImageBackground
-        source={require('../../../assets/fondo.png')}
+        source={require('../../../assets/fondo.webp')}
         style={styles.background}
         blurRadius={15}
       >
@@ -222,21 +237,26 @@ export default function ReservaDetalle() {
   const order = currentOrder.order || currentOrder;
   const user_data = currentOrder.user || {};
   const event_data = currentOrder.event || {};
-  const currency = currentOrder.currency || 'EUR';
+  // Get currency from the order object (stored per order from venue settings)
+  const currency = order.currency || 'GTQ';
   const currencySymbol = getCurrencySymbol(currency);
 
-  const canApprove = order.status === 'pending_staff_approval';
-  const canReject = order.status === 'pending_staff_approval';
+  const canApprove = order.status === 'pending';
+  const canReject = order.status === 'pending';
 
   return (
     <ImageBackground
-      source={require('../../../assets/fondo.png')}
+      source={require('../../../assets/fondo.webp')}
       style={styles.background}
       blurRadius={15}
     >
       <View style={styles.overlay} />
+      <CustomHeader showBackButton />
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={[styles.scrollView, { paddingTop: HEADER_CONTENT_HEIGHT + 8 }]}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.container}>
             <View style={styles.statusContainer}>
               <BlurView intensity={60} tint="dark" style={styles.statusBadge}>
@@ -375,75 +395,58 @@ export default function ReservaDetalle() {
 
             {(canApprove || canReject) && (
               <View style={styles.actionsContainer}>
-                {canApprove && (
-                  <TouchableOpacity
-                    onPress={handleApprove}
-                    disabled={isApproving}
-                    activeOpacity={0.8}
-                    style={styles.actionButton}
+                <TouchableOpacity
+                  onPress={handleApprove}
+                  disabled={isApproving}
+                  activeOpacity={0.8}
+                  style={{ flex: 1 }}
+                >
+                  <LinearGradient
+                    colors={['rgba(16, 185, 129, 0.3)', 'rgba(5, 150, 105, 0.3)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.approveButton}
                   >
-                    <LinearGradient
-                      colors={['rgba(52, 211, 153, 0.9)', 'rgba(16, 185, 129, 0.9)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.actionButtonGradient}
-                    >
-                      {isApproving ? (
-                        <ActivityIndicator color="white" />
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark-circle-outline" size={24} color="white" />
-                          <Text style={styles.actionButtonText}>
-                            Approve & Send Payment Link
-                          </Text>
-                        </>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
+                    {isApproving ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle-outline" size={20} color="white" />
+                        <Text style={styles.buttonText}>Approve</Text>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
 
-                {canReject && (
-                  <TouchableOpacity
-                    onPress={() => setShowRejectModal(true)}
-                    disabled={isRejecting}
-                    activeOpacity={0.8}
-                    style={styles.actionButton}
+                <TouchableOpacity
+                  onPress={() => setShowRejectModal(true)}
+                  disabled={isRejecting}
+                  activeOpacity={0.8}
+                  style={{ flex: 1 }}
+                >
+                  <LinearGradient
+                    colors={['rgba(239, 68, 68, 0.3)', 'rgba(220, 38, 38, 0.3)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.rejectButton}
                   >
-                    <LinearGradient
-                      colors={['rgba(239, 68, 68, 0.9)', 'rgba(220, 38, 38, 0.9)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.actionButtonGradient}
-                    >
-                      <Ionicons name="close-circle-outline" size={24} color="white" />
-                      <Text style={styles.actionButtonText}>Reject Order</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
+                    <Ionicons name="close-circle-outline" size={20} color="white" />
+                    <Text style={styles.buttonText}>Reject</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
             )}
           </View>
         </ScrollView>
 
-        <Modal
-          visible={showRejectModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowRejectModal(false)}
-        >
+        {/* Reject Modal */}
+        <Modal visible={showRejectModal} transparent animationType="fade">
           <View style={styles.modalOverlay}>
-            <BlurView intensity={80} tint="dark" style={styles.modalContent}>
-              <LinearGradient
-                colors={['rgba(139, 92, 246, 0.05)', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
+            <BlurView intensity={90} tint="dark" style={styles.modalContent}>
               <View style={styles.modalInner}>
                 <Text style={styles.modalTitle}>Reject Order</Text>
-                <Text style={styles.modalSubtitle}>
-                  Please provide a reason for rejecting this order:
-                </Text>
+                <Text style={styles.modalSubtitle}>Please provide a reason for rejection</Text>
+
                 <TextInput
                   style={styles.modalInput}
                   placeholder="Reason for rejection..."
@@ -454,34 +457,37 @@ export default function ReservaDetalle() {
                   numberOfLines={4}
                   textAlignVertical="top"
                 />
+
                 <View style={styles.modalActions}>
                   <TouchableOpacity
-                    style={styles.modalButton}
                     onPress={() => {
                       setShowRejectModal(false);
                       setRejectReason('');
                     }}
-                    disabled={isRejecting}
                     activeOpacity={0.8}
+                    style={{ flex: 1 }}
                   >
-                    <Text style={styles.modalButtonText}>Cancel</Text>
+                    <View style={styles.modalCancelButton}>
+                      <Text style={styles.modalCancelText}>Cancel</Text>
+                    </View>
                   </TouchableOpacity>
+
                   <TouchableOpacity
-                    style={styles.modalButton}
                     onPress={handleReject}
                     disabled={isRejecting || !rejectReason.trim()}
                     activeOpacity={0.8}
+                    style={{ flex: 1 }}
                   >
                     <LinearGradient
                       colors={['rgba(239, 68, 68, 0.9)', 'rgba(220, 38, 38, 0.9)']}
                       start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.modalButtonGradient}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.modalConfirmButton, (!rejectReason.trim() || isRejecting) && styles.modalButtonDisabled]}
                     >
                       {isRejecting ? (
                         <ActivityIndicator color="white" />
                       ) : (
-                        <Text style={[styles.modalButtonText, { color: 'white' }]}>Reject</Text>
+                        <Text style={styles.modalConfirmText}>Reject</Text>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
@@ -648,23 +654,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '300',
   },
+  scrollView: {
+    flex: 1,
+  },
   actionsContainer: {
+    flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+    marginTop: 8,
+    marginBottom: 32,
   },
-  actionButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  actionButtonGradient: {
+  approveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    gap: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
-  actionButtonText: {
+  rejectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '500',
@@ -674,15 +693,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
   },
   modalContent: {
-    width: '100%',
-    maxWidth: 480,
+    width: '85%',
+    maxWidth: 400,
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalInner: {
     backgroundColor: 'rgba(15, 15, 21, 0.95)',
@@ -690,15 +706,14 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     color: 'white',
-    fontSize: 24,
-    fontWeight: '500',
+    fontSize: 20,
+    fontWeight: '600',
     marginBottom: 8,
   },
   modalSubtitle: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 14,
-    fontWeight: '300',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   modalInput: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -707,8 +722,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     color: 'white',
-    fontSize: 15,
-    fontWeight: '300',
+    fontSize: 14,
     minHeight: 100,
     marginBottom: 20,
   },
@@ -716,22 +730,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  modalButton: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
+  modalCancelButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  modalButtonGradient: {
-    paddingVertical: 14,
+    borderRadius: 12,
+    padding: 12,
     alignItems: 'center',
   },
-  modalButtonText: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 15,
-    fontWeight: '400',
-    textAlign: 'center',
-    paddingVertical: 14,
+  modalCancelText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalConfirmButton: {
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalConfirmText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
