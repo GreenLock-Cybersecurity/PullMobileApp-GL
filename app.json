@@ -10,7 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pullevents.staff"
+      "bundleIdentifier": "com.pullevents.staff",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.pullevents.staff",
