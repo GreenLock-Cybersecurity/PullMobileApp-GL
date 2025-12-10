@@ -8,15 +8,30 @@
     "scheme": "pullstaff",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0f"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pullevents.staff",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0a0a0f"
+      }
     },
     "android": {
       "package": "com.pullevents.staff",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0a0a0f"
+      },
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
         "backgroundColor": "#0a0a0f"
       }
     },

@@ -9,7 +9,7 @@ export default {
     userInterfaceStyle: "dark",
     icon: "./assets/images/icon.png",
     splash: {
-      image: "./assets/images/splash.png",
+      image: "./assets/splash-icon.png",
       resizeMode: "contain",
       backgroundColor: "#0a0a0f"
     },
@@ -38,13 +38,18 @@ export default {
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
       eas: {
-        projectId: process.env.EAS_PROJECT_ID
+        projectId: "cc92c30d-3724-45c7-913f-6774f3a1ebfb"
       }
     },
     ios: {
       bundleIdentifier: "com.pullevents.staff",
       supportsTablet: true,
       buildNumber: "1",
+      splash: {
+        image: "./assets/splash-icon.png",
+        resizeMode: "contain",
+        backgroundColor: "#0a0a0f"
+      },
       infoPlist: {
         NSCameraUsageDescription: "Pull Events needs camera access to scan QR codes for ticket validation.",
         NSPhotoLibraryUsageDescription: "Pull Events needs access to your photos to upload event images.",
@@ -60,6 +65,11 @@ export default {
       versionCode: 1,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#0a0a0f"
+      },
+      splash: {
+        image: "./assets/splash-icon.png",
+        resizeMode: "contain",
         backgroundColor: "#0a0a0f"
       },
       permissions: [
