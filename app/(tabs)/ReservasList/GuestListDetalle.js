@@ -1,4 +1,4 @@
-// app/(tabs)/ReservasList/GroupReservaDetalle.js - Professional Design
+// app/(tabs)/ReservasList/GuestListDetalle.js - Professional Design
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   View,
@@ -15,7 +15,7 @@ import {
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/useAuthStore';
-import { groupReservationService } from '@/services/groupReservationService';
+import { guestListService } from '@/services/guestListService';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomHeader from '@/components/CustomHeader';
@@ -23,14 +23,14 @@ import BackgroundGlow from '@/components/BackgroundGlow';
 
 const HEADER_CONTENT_HEIGHT = 56;
 
-export default function GroupReservaDetalle() {
+export default function GuestListDetalle() {
   const router = useRouter();
   const navigation = useNavigation();
   const { id } = useLocalSearchParams();
   const user = useAuthStore((state) => state.user);
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const [reservation, setReservation] = useState(null);
+  const [signup, setSignup] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isApproving, setIsApproving] = useState(false);
@@ -51,44 +51,47 @@ export default function GroupReservaDetalle() {
 
   useEffect(() => {
     if (id) {
-      fetchReservationDetail();
+      fetchSignupDetail();
     }
   }, [id]);
 
-  const fetchReservationDetail = async () => {
+  const fetchSignupDetail = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const result = await groupReservationService.getReservationDetails(id);
+      // Try to get from pending signups first
+      if (user?.venue_id_real) {
+        const result = await guestListService.getPendingSignups(user.venue_id_real);
 
+        if (result.success) {
+          const found = result.data.find(s => s.id === id);
+          if (found) {
+            setSignup(found);
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      // If not found in pending, try direct fetch
+      const result = await guestListService.getSignupDetails(id);
       if (result.success) {
-        setReservation(result.data);
+        setSignup(result.data);
       } else {
         setError(result.error);
       }
     } catch (err) {
-      setError('Failed to load reservation details');
+      setError('Failed to load signup details');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getCurrencySymbol = (currency) => {
-    const symbols = {
-      'EUR': '€',
-      'USD': '$',
-      'GTQ': 'Q',
-      'MXN': '$',
-      'GBP': '£',
-    };
-    return symbols[currency] || currency || 'Q';
-  };
-
   const handleApprove = async () => {
     Alert.alert(
-      'Approve Reservation',
-      'Generate tickets for paid guests and notify organizer?',
+      'Approve Signup',
+      'Generate ticket and notify the guest?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -96,17 +99,17 @@ export default function GroupReservaDetalle() {
           onPress: async () => {
             setIsApproving(true);
             try {
-              const result = await groupReservationService.approveReservation(id);
+              const result = await guestListService.approveSignup(id);
 
               if (result.success) {
-                Alert.alert('Success', 'Reservation approved! Tickets sent to paid guests.', [
+                Alert.alert('Success', 'Signup approved! Ticket sent to guest.', [
                   { text: 'OK', onPress: () => router.back() },
                 ]);
               } else {
                 Alert.alert('Error', result.error);
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to approve reservation');
+              Alert.alert('Error', 'Failed to approve signup');
             } finally {
               setIsApproving(false);
             }
@@ -124,18 +127,18 @@ export default function GroupReservaDetalle() {
 
     setIsRejecting(true);
     try {
-      const result = await groupReservationService.rejectReservation(id, rejectReason);
+      const result = await guestListService.rejectSignup(id, rejectReason);
 
       if (result.success) {
         setShowRejectModal(false);
-        Alert.alert('Success', 'Reservation rejected successfully', [
+        Alert.alert('Success', 'Signup rejected successfully', [
           { text: 'OK', onPress: () => router.back() },
         ]);
       } else {
         Alert.alert('Error', result.error);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to reject reservation');
+      Alert.alert('Error', 'Failed to reject signup');
     } finally {
       setIsRejecting(false);
     }
@@ -144,8 +147,9 @@ export default function GroupReservaDetalle() {
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return '#f59e0b';
-      case 'confirmed': return '#10b981';
+      case 'approved': return '#10b981';
       case 'rejected': return '#ef4444';
+      case 'cancelled': return '#6b7280';
       default: return '#6b7280';
     }
   };
@@ -153,10 +157,19 @@ export default function GroupReservaDetalle() {
   const getStatusDisplayName = (status) => {
     const statusMap = {
       pending: 'Pending Approval',
-      confirmed: 'Confirmed',
+      approved: 'Approved',
       rejected: 'Rejected',
+      cancelled: 'Cancelled',
     };
     return statusMap[status] || status;
+  };
+
+  const getGenderDisplay = (gender) => {
+    switch (gender) {
+      case 'male': return 'Male';
+      case 'female': return 'Female';
+      default: return gender;
+    }
   };
 
   const formatDate = (dateString) => {
@@ -176,21 +189,21 @@ export default function GroupReservaDetalle() {
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color="rgb(168, 85, 255)" />
-            <Text style={styles.loadingText}>Loading reservation...</Text>
+            <Text style={styles.loadingText}>Loading signup...</Text>
           </View>
         </SafeAreaView>
       </BackgroundGlow>
     );
   }
 
-  if (error || !reservation) {
+  if (error || !signup) {
     return (
       <BackgroundGlow>
         <CustomHeader showBackButton scrollY={scrollY} enableBlurOnScroll />
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.centerContainer}>
             <Ionicons name="alert-circle" size={64} color="rgba(239, 68, 68, 0.8)" />
-            <Text style={styles.errorText}>{error || 'Reservation not found'}</Text>
+            <Text style={styles.errorText}>{error || 'Signup not found'}</Text>
             <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} style={{ marginTop: 20 }}>
               <View style={styles.backButton}>
                 <Ionicons name="arrow-back" size={18} color="white" />
@@ -203,11 +216,9 @@ export default function GroupReservaDetalle() {
     );
   }
 
-  const canApprove = reservation.status_name === 'pending';
-  const canReject = reservation.status_name === 'pending';
-  const paidGuests = reservation.guests?.filter(g => g.paid_at) || [];
-  const currency = reservation.currency || 'GTQ';
-  const currencySymbol = getCurrencySymbol(currency);
+  const canApprove = signup.status === 'pending';
+  const canReject = signup.status === 'pending';
+  const totalPeople = 1 + (signup.guest_count || 0);
 
   return (
     <BackgroundGlow>
@@ -222,78 +233,94 @@ export default function GroupReservaDetalle() {
         >
           {/* Status Badge */}
           <View style={styles.statusContainer}>
-            <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(reservation.status_name)}20`, borderColor: `${getStatusColor(reservation.status_name)}40` }]}>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(reservation.status_name) }]} />
-              <Text style={[styles.statusText, { color: getStatusColor(reservation.status_name) }]}>
-                {getStatusDisplayName(reservation.status_name)}
+            <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(signup.status)}20`, borderColor: `${getStatusColor(signup.status)}40` }]}>
+              <View style={[styles.statusDot, { backgroundColor: getStatusColor(signup.status) }]} />
+              <Text style={[styles.statusText, { color: getStatusColor(signup.status) }]}>
+                {getStatusDisplayName(signup.status)}
               </Text>
             </View>
           </View>
 
           {/* Title & Price */}
           <View style={styles.titleSection}>
-            <Text style={styles.orderTitle}>Group Reservation</Text>
+            <Text style={styles.orderTitle}>Guest List Signup</Text>
             <View style={styles.priceContainer}>
-              <Text style={styles.priceLabel}>Total Amount</Text>
-              <Text style={styles.priceAmount}>
-                {currencySymbol}{reservation.total_amount?.toFixed(2) || '0.00'}
-              </Text>
+              <Text style={styles.priceLabel}>Price</Text>
+              <Text style={styles.priceAmountFree}>FREE</Text>
             </View>
           </View>
 
           {/* Info Tags */}
           <View style={styles.tagsRow}>
-            <View style={[styles.tag, styles.tagGuests]}>
+            <View style={[styles.tag, styles.tagPeople]}>
               <Ionicons name="people" size={14} color="rgb(168, 85, 255)" />
-              <Text style={[styles.tagText, styles.tagTextGuests]}>
-                {reservation.guest_count || 0} Guests
+              <Text style={[styles.tagText, styles.tagTextPeople]}>
+                {totalPeople} {totalPeople === 1 ? 'Person' : 'People'}
               </Text>
             </View>
-            <View style={[styles.tag, styles.tagPaid]}>
-              <Ionicons name="checkmark-circle" size={14} color="rgb(16, 185, 129)" />
-              <Text style={[styles.tagText, styles.tagTextPaid]}>
-                {paidGuests.length} Paid
+            <View style={[styles.tag, styles.tagGender]}>
+              <Ionicons
+                name={signup.gender === 'male' ? 'male' : 'female'}
+                size={14}
+                color={signup.gender === 'male' ? 'rgb(96, 165, 250)' : 'rgb(244, 114, 182)'}
+              />
+              <Text style={[styles.tagText, { color: signup.gender === 'male' ? 'rgb(96, 165, 250)' : 'rgb(244, 114, 182)' }]}>
+                {getGenderDisplay(signup.gender)}
               </Text>
             </View>
             <View style={[styles.tag, styles.tagDate]}>
               <Ionicons name="calendar" size={14} color="rgb(59, 130, 246)" />
               <Text style={[styles.tagText, styles.tagTextDate]}>
-                {reservation.created_at
-                  ? new Date(reservation.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                {signup.created_at
+                  ? new Date(signup.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                   : 'N/A'}
               </Text>
             </View>
           </View>
 
-          {/* Event Section */}
+          {/* Guest List Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <View style={[styles.sectionIconWrapper, { backgroundColor: 'rgba(168, 85, 255, 0.1)' }]}>
-                <Ionicons name="calendar-outline" size={16} color="rgb(168, 85, 255)" />
+                <Ionicons name="list-outline" size={16} color="rgb(168, 85, 255)" />
               </View>
-              <Text style={[styles.sectionLabel, { color: 'rgb(192, 132, 252)' }]}>Event</Text>
+              <Text style={[styles.sectionLabel, { color: 'rgb(192, 132, 252)' }]}>Guest List</Text>
             </View>
             <View style={styles.sectionCard}>
-              <Text style={styles.cardTitle}>{reservation.event_name || 'Event Name'}</Text>
-              <Text style={styles.cardSubtitle}>{reservation.venue_name || 'Venue'}</Text>
+              <Text style={styles.cardTitle}>{signup.guest_list_name || 'Guest List'}</Text>
+              <Text style={styles.cardSubtitle}>{signup.event_name || 'Event'}</Text>
+              {signup.event_date && (
+                <View style={[styles.detailItem, { marginTop: 8 }]}>
+                  <Ionicons name="time-outline" size={16} color="rgba(255, 255, 255, 0.4)" />
+                  <Text style={styles.detailText}>{formatDate(signup.event_date)}</Text>
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Organizer Section */}
+          {/* Responsible Person Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <View style={[styles.sectionIconWrapper, { backgroundColor: 'rgba(52, 211, 153, 0.1)' }]}>
                 <Ionicons name="person-outline" size={16} color="rgb(52, 211, 153)" />
               </View>
-              <Text style={[styles.sectionLabel, { color: 'rgb(110, 231, 183)' }]}>Organizer</Text>
+              <Text style={[styles.sectionLabel, { color: 'rgb(110, 231, 183)' }]}>Responsible Person</Text>
             </View>
             <View style={styles.sectionCard}>
-              <Text style={styles.cardTitle}>{reservation.organizer_name}</Text>
+              <Text style={styles.cardTitle}>{signup.name} {signup.last_name}</Text>
               <View style={styles.detailsList}>
                 <View style={styles.detailItem}>
                   <Ionicons name="mail-outline" size={16} color="rgba(255, 255, 255, 0.4)" />
-                  <Text style={styles.detailText}>{reservation.organizer_email}</Text>
+                  <Text style={styles.detailText}>{signup.email}</Text>
                 </View>
+                {signup.phone && (
+                  <View style={styles.detailItem}>
+                    <Ionicons name="call-outline" size={16} color="rgba(255, 255, 255, 0.4)" />
+                    <Text style={styles.detailText}>
+                      {signup.phone_prefix || '+502'} {signup.phone}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -308,102 +335,51 @@ export default function GroupReservaDetalle() {
             </View>
             <View style={styles.sectionCard}>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Total Guests</Text>
-                <Text style={styles.infoValue}>{reservation.guest_count}</Text>
+                <Text style={styles.infoLabel}>Responsible</Text>
+                <Text style={styles.infoValue}>1</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Paid Guests</Text>
-                <Text style={styles.infoValueGreen}>{paidGuests.length}</Text>
+                <Text style={styles.infoLabel}>Companions</Text>
+                <Text style={styles.infoValue}>+{signup.guest_count || 0}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Total Amount</Text>
-                <Text style={styles.infoValue}>{currencySymbol}{reservation.total_amount?.toFixed(2)}</Text>
+                <Text style={styles.infoLabel}>Total People</Text>
+                <Text style={styles.infoValuePurple}>{totalPeople}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Paid Amount</Text>
-                <Text style={styles.infoValueGreen}>
-                  {currencySymbol}{((reservation.total_amount || 0) - (reservation.pending_amount || 0)).toFixed(2)}
-                </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Pending Amount</Text>
-                <Text style={styles.infoValueYellow}>{currencySymbol}{reservation.pending_amount?.toFixed(2)}</Text>
+                <Text style={styles.infoLabel}>Price</Text>
+                <Text style={styles.infoValueGreen}>FREE</Text>
               </View>
             </View>
           </View>
 
-          {/* Guests Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={[styles.sectionIconWrapper, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
-                <Ionicons name="people-outline" size={16} color="rgb(59, 130, 246)" />
-              </View>
-              <Text style={[styles.sectionLabel, { color: 'rgb(96, 165, 250)' }]}>
-                Guests ({reservation.guests?.length || 0})
-              </Text>
-            </View>
-            <View style={styles.sectionCard}>
-              {reservation.guests?.map((guest, index) => (
-                <View key={guest.id} style={styles.guestItem}>
-                  <View style={styles.guestInfo}>
-                    {guest.paid_at ? (
-                      <Ionicons name="checkmark-circle" size={18} color="#10b981" />
-                    ) : (
-                      <Ionicons name="time-outline" size={18} color="#f59e0b" />
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.guestName}>
-                        {guest.name} {guest.last_name}
-                        {index === 0 && <Text style={styles.organizerTag}> (Organizer)</Text>}
-                      </Text>
-                      {guest.email && <Text style={styles.guestEmail}>{guest.email}</Text>}
-                    </View>
-                  </View>
-                  {guest.paid_at ? (
-                    <Text style={styles.guestPaid}>Paid</Text>
-                  ) : (
-                    <Text style={styles.guestPending}>{currencySymbol}{guest.amount_due?.toFixed(2)}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Bottles Section */}
-          {reservation.bottles && reservation.bottles.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeaderRow}>
-                <View style={[styles.sectionIconWrapper, { backgroundColor: 'rgba(244, 114, 182, 0.1)' }]}>
-                  <Ionicons name="wine-outline" size={16} color="rgb(244, 114, 182)" />
-                </View>
-                <Text style={[styles.sectionLabel, { color: 'rgb(251, 146, 199)' }]}>Bottles</Text>
-              </View>
-              <View style={styles.sectionCard}>
-                {reservation.bottles.map((bottle, index) => (
-                  <View key={index} style={styles.bottleItem}>
-                    <Text style={styles.bottleQuantity}>{bottle.quantity}x</Text>
-                    <Text style={styles.bottleName}>{bottle.bottle_name}</Text>
-                    <Text style={styles.bottlePrice}>{currencySymbol}{(bottle.price * bottle.quantity).toFixed(2)}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Special Requests */}
-          {reservation.special_requests && (
+          {/* Verification Code Section */}
+          {signup.verification_code && (
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
                 <View style={[styles.sectionIconWrapper, { backgroundColor: 'rgba(139, 92, 246, 0.1)' }]}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={16} color="rgb(139, 92, 246)" />
+                  <Ionicons name="key-outline" size={16} color="rgb(139, 92, 246)" />
                 </View>
-                <Text style={[styles.sectionLabel, { color: 'rgb(167, 139, 250)' }]}>Special Requests</Text>
+                <Text style={[styles.sectionLabel, { color: 'rgb(167, 139, 250)' }]}>Verification Code</Text>
               </View>
               <View style={styles.sectionCard}>
-                <Text style={styles.specialRequestsText}>{reservation.special_requests}</Text>
+                <Text style={styles.verificationCode}>{signup.verification_code}</Text>
               </View>
             </View>
           )}
+
+          {/* Registered Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={[styles.sectionIconWrapper, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
+                <Ionicons name="time-outline" size={16} color="rgb(59, 130, 246)" />
+              </View>
+              <Text style={[styles.sectionLabel, { color: 'rgb(96, 165, 250)' }]}>Registered</Text>
+            </View>
+            <View style={styles.sectionCard}>
+              <Text style={styles.detailText}>{formatDate(signup.created_at)}</Text>
+            </View>
+          </View>
 
           {/* Action Buttons */}
           {(canApprove || canReject) && (
@@ -454,14 +430,14 @@ export default function GroupReservaDetalle() {
           <BlurView intensity={90} tint="dark" style={styles.modalBlur}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Reject Reservation</Text>
+                <Text style={styles.modalTitle}>Reject Signup</Text>
                 <TouchableOpacity onPress={() => setShowRejectModal(false)}>
                   <Ionicons name="close-circle" size={28} color="rgba(255, 255, 255, 0.5)" />
                 </TouchableOpacity>
               </View>
 
               <Text style={styles.modalSubtitle}>
-                Please provide a reason for rejecting this reservation.
+                Please provide a reason for rejecting this signup.
               </Text>
 
               <TextInput
@@ -600,7 +576,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '400',
   },
-  priceAmount: {
+  priceAmountFree: {
     color: 'rgb(16, 185, 129)',
     fontSize: 26,
     fontWeight: '700',
@@ -625,17 +601,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  tagGuests: {
+  tagPeople: {
     backgroundColor: 'rgba(168, 85, 255, 0.1)',
   },
-  tagTextGuests: {
+  tagTextPeople: {
     color: 'rgb(192, 132, 252)',
   },
-  tagPaid: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-  },
-  tagTextPaid: {
-    color: 'rgb(52, 211, 153)',
+  tagGender: {
+    backgroundColor: 'rgba(96, 165, 250, 0.1)',
   },
   tagDate: {
     backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -721,79 +694,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  infoValueYellow: {
-    color: 'rgb(245, 158, 11)',
-    fontSize: 13,
-    fontWeight: '600',
+  infoValuePurple: {
+    color: 'rgb(167, 139, 250)',
+    fontSize: 15,
+    fontWeight: '700',
   },
 
-  // Guests
-  guestItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  guestInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  guestName: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  organizerTag: {
-    color: '#a78bfa',
-    fontSize: 11,
-  },
-  guestEmail: {
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  guestPaid: {
-    color: '#10b981',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  guestPending: {
-    color: '#f59e0b',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  // Bottles
-  bottleItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  bottleQuantity: {
-    color: '#a78bfa',
-    fontSize: 13,
-    fontWeight: '600',
-    minWidth: 35,
-  },
-  bottleName: {
-    flex: 1,
-    color: 'white',
-    fontSize: 13,
-  },
-  bottlePrice: {
-    color: '#10b981',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  // Special Requests
-  specialRequestsText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 13,
-    lineHeight: 20,
+  // Verification Code
+  verificationCode: {
+    color: 'rgb(167, 139, 250)',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 2,
   },
 
   // Actions

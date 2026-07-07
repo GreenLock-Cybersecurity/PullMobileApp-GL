@@ -5,28 +5,31 @@ import { jwtDecode } from 'jwt-decode';
 export const authService = {
   login: async (email, password) => {
     try {
+      // Set header before request for faster subsequent calls
       const response = await apiClient.post('/auth/login-workers', {
         email: email.trim().toLowerCase(),
-        password: password,
+        password,
       });
 
       const { employee, token } = response.data;
-      const decodedToken = jwtDecode(token);
 
-      // Enhanced user object with real IDs from JWT
-      const enhancedUser = {
-        ...employee,
-        role: decodedToken.role || employee?.role,
-        venue_id_real: decodedToken.venue_id,
-        organization_id_real: decodedToken.organization_id,
-        employee_id_real: decodedToken.employee_id,
-      };
-
+      // Set auth header immediately
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      // Decode JWT only for IDs not in response
+      const decodedToken = jwtDecode(token);
 
       return {
         success: true,
-        data: { user: enhancedUser, token },
+        data: {
+          user: {
+            ...employee,
+            venue_id_real: decodedToken.venue_id,
+            organization_id_real: decodedToken.organization_id,
+            employee_id_real: decodedToken.employee_id,
+          },
+          token,
+        },
       };
     } catch (error) {
       return {
@@ -70,6 +73,10 @@ export const authService = {
             venue_id_real: claims.venue_id,
             organization_id_real: claims.organization_id,
             employee_id_real: claims.employee_id,
+            venue_name: claims.venue_name,
+            venue_slug: claims.venue_slug,
+            venue_currency: claims.venue_currency,
+            use_vip_list_flow: claims.use_vip_list_flow,
           },
         };
       }
@@ -102,6 +109,26 @@ export const authService = {
       return {
         success: false,
         error: error.response?.data?.error || 'Token refresh failed',
+      };
+    }
+  },
+
+  // Refresh staff JWT token - extends session for another week
+  refreshStaffToken: async () => {
+    try {
+      const response = await apiClient.post('/auth/refresh-staff-token');
+      const newToken = response.data.token;
+
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+
+      return {
+        success: true,
+        data: { token: newToken },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Staff token refresh failed',
       };
     }
   },

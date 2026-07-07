@@ -1,33 +1,35 @@
-import React from 'react';
+// app/(tabs)/Logout/index.js - Clean Modern Design
+import React, { useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   SafeAreaView,
   Alert,
-  ImageBackground,
   StyleSheet,
   ScrollView,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/store/useAuthStore';
 import CustomHeader from '@/components/CustomHeader';
-import { LinearGradient } from 'expo-linear-gradient';
+import BackgroundGlow from '@/components/BackgroundGlow';
 import { BlurView } from 'expo-blur';
 
 export default function Profile() {
   const router = useRouter();
   const { logout, user } = useAuthStore();
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const handleLogout = () => {
     Alert.alert(
       'Confirm Logout',
-      'Are you sure you want to logout?',
+      'Are you sure you want to sign out?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Logout',
+          text: 'Sign Out',
           style: 'destructive',
           onPress: () => {
             logout();
@@ -43,20 +45,6 @@ export default function Profile() {
     ? `${user.firstName} ${user.lastName}`
     : user?.full_name || user?.name || 'Staff Member';
 
-  // Get initials for avatar
-  const getInitials = () => {
-    if (user?.firstName && user?.lastName) {
-      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
-    }
-    if (user?.full_name) {
-      const parts = user.full_name.split(' ');
-      return parts.length > 1
-        ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-        : parts[0][0].toUpperCase();
-    }
-    return 'U';
-  };
-
   // Get role display text
   const getRoleDisplay = () => {
     if (!user?.role) return 'Staff';
@@ -69,155 +57,149 @@ export default function Profile() {
 
   const isAdmin = user?.role?.toLowerCase() === 'admin';
 
+  // Colors based on role - Admin: Blue, Staff: Purple
+  const accentColor = isAdmin ? 'rgb(59, 130, 246)' : 'rgb(168, 85, 255)';
+  const accentColorRgba = (opacity) => isAdmin
+    ? `rgba(59, 130, 246, ${opacity})`
+    : `rgba(168, 85, 255, ${opacity})`;
+
   return (
-    <ImageBackground
-      source={require('../../../assets/fondo.webp')}
-      style={styles.background}
-      blurRadius={15}
-    >
-      <View style={styles.overlay} />
-      <CustomHeader title="Profile" />
+    <BackgroundGlow>
+      <CustomHeader title="Profile" scrollY={scrollY} enableBlurOnScroll />
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          scrollEventThrottle={16}
         >
-          {/* Profile Card */}
-          <View style={styles.profileSection}>
-            {/* Avatar */}
-            <View style={styles.avatarWrapper}>
-              <LinearGradient
-                colors={isAdmin
-                  ? ['rgba(255, 215, 0, 0.7)', 'rgba(255, 165, 0, 0.7)']
-                  : ['rgba(139, 92, 246, 0.7)', 'rgba(217, 70, 239, 0.7)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.avatar}
-              >
-                <Text style={styles.avatarText}>{getInitials()}</Text>
-              </LinearGradient>
-              {isAdmin && (
-                <View style={styles.adminBadge}>
-                  <Ionicons name="shield-checkmark" size={14} color="#FFD700" />
-                </View>
-              )}
+          {/* Header Section */}
+          <View style={styles.header}>
+            <View style={[
+              styles.avatarContainer,
+              {
+                backgroundColor: accentColorRgba(0.1),
+                borderColor: accentColorRgba(0.7),
+              }
+            ]}>
+              <Ionicons
+                name={isAdmin ? 'shield-checkmark' : 'person'}
+                size={36}
+                color={accentColor}
+              />
             </View>
-
-            {/* Name and Role */}
             <Text style={styles.displayName}>{displayName}</Text>
-
-            <View style={styles.roleBadge}>
-              <LinearGradient
-                colors={isAdmin
-                  ? ['rgba(255, 215, 0, 0.2)', 'rgba(255, 165, 0, 0.2)']
-                  : ['rgba(139, 92, 246, 0.2)', 'rgba(217, 70, 239, 0.2)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.roleBadgeGradient}
-              >
-                <Ionicons
-                  name={isAdmin ? 'shield-checkmark' : 'person-circle'}
-                  size={14}
-                  color={isAdmin ? '#FFD700' : '#a78bfa'}
-                />
-                <Text style={[styles.roleText, isAdmin && styles.roleTextAdmin]}>
-                  {getRoleDisplay()}
-                </Text>
-              </LinearGradient>
+            <View style={[
+              styles.roleBadge,
+              {
+                backgroundColor: accentColorRgba(0.15),
+                borderColor: accentColorRgba(0.4),
+              }
+            ]}>
+              <Text style={[styles.roleText, { color: accentColor }]}>
+                {getRoleDisplay()}
+              </Text>
             </View>
           </View>
 
-          {/* Info Card */}
-          <BlurView intensity={60} tint="dark" style={styles.infoCard}>
-            <View style={styles.infoCardInner}>
-              <Text style={styles.sectionTitle}>Account Information</Text>
-
-              {/* Email */}
-              <View style={styles.infoRow}>
-                <View style={styles.infoIconBox}>
-                  <Ionicons name="mail-outline" size={20} color="#a78bfa" />
-                </View>
-                <View style={styles.infoTextContainer}>
-                  <Text style={styles.infoLabel}>Email</Text>
-                  <Text style={styles.infoValue}>{user?.email || 'Not available'}</Text>
-                </View>
+          {/* All Info in One Card */}
+          <View style={styles.card}>
+            {/* Email */}
+            <View style={styles.infoItem}>
+              <Ionicons name="mail-outline" size={20} color={accentColor} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>{user?.email || 'Not available'}</Text>
               </View>
+            </View>
 
-              {/* Venue */}
-              {user?.venue_name && (
-                <View style={styles.infoRow}>
-                  <View style={styles.infoIconBox}>
-                    <Ionicons name="business-outline" size={20} color="#a78bfa" />
-                  </View>
-                  <View style={styles.infoTextContainer}>
+            <View style={[styles.divider, { backgroundColor: accentColorRgba(0.1) }]} />
+
+            {/* Role */}
+            <View style={styles.infoItem}>
+              <Ionicons name={isAdmin ? 'shield-outline' : 'person-outline'} size={20} color={accentColor} />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Role</Text>
+                <Text style={[styles.infoValue, { color: accentColor }]}>{getRoleDisplay()}</Text>
+              </View>
+            </View>
+
+            {/* Venue */}
+            {user?.venue_name && (
+              <>
+                <View style={[styles.divider, { backgroundColor: accentColorRgba(0.1) }]} />
+                <View style={styles.infoItem}>
+                  <Ionicons name="business-outline" size={20} color={accentColor} />
+                  <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Venue</Text>
                     <Text style={styles.infoValue}>{user.venue_name}</Text>
                   </View>
                 </View>
-              )}
+              </>
+            )}
 
-              {/* Organization */}
-              {user?.organization_name && (
-                <View style={styles.infoRow}>
-                  <View style={styles.infoIconBox}>
-                    <Ionicons name="layers-outline" size={20} color="#a78bfa" />
-                  </View>
-                  <View style={styles.infoTextContainer}>
+            {/* Organization */}
+            {user?.organization_name && (
+              <>
+                <View style={[styles.divider, { backgroundColor: accentColorRgba(0.1) }]} />
+                <View style={styles.infoItem}>
+                  <Ionicons name="layers-outline" size={20} color={accentColor} />
+                  <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Organization</Text>
                     <Text style={styles.infoValue}>{user.organization_name}</Text>
                   </View>
                 </View>
-              )}
+              </>
+            )}
 
-              {/* Employee ID */}
-              {user?.id && (
-                <View style={[styles.infoRow, styles.infoRowLast]}>
-                  <View style={styles.infoIconBox}>
-                    <Ionicons name="id-card-outline" size={20} color="#a78bfa" />
-                  </View>
-                  <View style={styles.infoTextContainer}>
+            {/* Employee ID */}
+            {user?.id && (
+              <>
+                <View style={[styles.divider, { backgroundColor: accentColorRgba(0.1) }]} />
+                <View style={styles.infoItem}>
+                  <Ionicons name="finger-print-outline" size={20} color="rgba(255, 255, 255, 0.4)" />
+                  <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Employee ID</Text>
-                    <Text style={styles.infoValueSmall}>{user.id.slice(0, 8)}...</Text>
+                    <Text style={styles.infoValueMono}>{user.id.slice(0, 16)}...</Text>
                   </View>
                 </View>
-              )}
-            </View>
-          </BlurView>
+              </>
+            )}
 
-          {/* Logout Button - Glass Morphism */}
+            <View style={[styles.divider, { backgroundColor: accentColorRgba(0.1) }]} />
+
+            {/* Status */}
+            <View style={styles.infoItem}>
+              <Ionicons name="checkmark-circle" size={20} color="rgb(52, 211, 153)" />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Status</Text>
+                <Text style={[styles.infoValue, { color: 'rgb(52, 211, 153)' }]}>Active</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Sign Out Button */}
           <TouchableOpacity
             onPress={handleLogout}
             activeOpacity={0.8}
-            style={styles.logoutButtonContainer}
+            style={styles.signOutButton}
           >
-            <BlurView intensity={40} tint="dark" style={styles.logoutButton}>
-              <View style={styles.logoutButtonInner}>
-                <Ionicons name="log-out-outline" size={22} color="#ef4444" />
-                <Text style={styles.logoutButtonText}>Sign Out</Text>
+            <BlurView intensity={60} tint="dark" style={styles.buttonBlur}>
+              <View style={styles.signOutButtonInner}>
+                <Ionicons name="log-out-outline" size={20} color="rgb(239, 68, 68)" />
+                <Text style={styles.signOutButtonText}>Sign Out</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
-
-          <Text style={styles.footerText}>
-            You will be redirected to the login screen
-          </Text>
         </ScrollView>
       </SafeAreaView>
-    </ImageBackground>
+    </BackgroundGlow>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-    backgroundColor: '#0a0a0f',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-  },
   safeArea: {
     flex: 1,
   },
@@ -227,169 +209,108 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 70,
-    paddingBottom: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 100,
+    paddingBottom: 60,
   },
 
-  // Profile Section
-  profileSection: {
+  // Header
+  header: {
     alignItems: 'center',
     marginBottom: 32,
-    width: '100%',
   },
-  avatarWrapper: {
-    position: 'relative',
-    marginBottom: 20,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  avatarContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 36,
-    fontWeight: '600',
-  },
-  adminBadge: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    backgroundColor: 'rgba(10, 10, 15, 0.9)',
-    borderRadius: 12,
-    padding: 6,
+    marginBottom: 16,
     borderWidth: 2,
-    borderColor: '#FFD700',
   },
   displayName: {
     color: 'white',
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 10,
+    letterSpacing: -0.3,
     textAlign: 'center',
   },
   roleBadge: {
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  roleBadgeGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
-    borderRadius: 20,
   },
   roleText: {
-    color: '#a78bfa',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  roleTextAdmin: {
-    color: '#FFD700',
   },
 
-  // Info Card
-  infoCard: {
-    width: '100%',
-    borderRadius: 20,
-    overflow: 'hidden',
+  // Card
+  card: {
     marginBottom: 24,
-  },
-  infoCardInner: {
-    backgroundColor: 'rgba(15, 15, 21, 0.5)',
+    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 20,
-    padding: 24,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  sectionTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 20,
-  },
-  infoRow: {
+
+  // Info Items
+  infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 16,
+    paddingVertical: 4,
   },
-  infoRowLast: {
-    borderBottomWidth: 0,
-    paddingBottom: 0,
-  },
-  infoIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  infoTextContainer: {
+  infoContent: {
     flex: 1,
   },
   infoLabel: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.4)',
     fontSize: 12,
     fontWeight: '400',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   infoValue: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
   },
-  infoValueSmall: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
+  infoValueMono: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 13,
     fontWeight: '400',
     fontFamily: 'monospace',
   },
-
-  // Logout Button - Glass Morphism
-  logoutButtonContainer: {
-    width: '100%',
-    marginBottom: 16,
+  divider: {
+    height: 1,
+    marginVertical: 14,
   },
-  logoutButton: {
-    borderRadius: 16,
+
+  // Sign Out Button
+  signOutButton: {
+    borderRadius: 12,
     overflow: 'hidden',
   },
-  logoutButtonInner: {
+  buttonBlur: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  signOutButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 18,
+    paddingVertical: 16,
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 16,
+    borderRadius: 12,
   },
-  logoutButtonText: {
-    color: '#ef4444',
-    fontSize: 17,
+  signOutButtonText: {
+    color: 'rgb(239, 68, 68)',
+    fontSize: 16,
     fontWeight: '600',
-  },
-
-  // Footer
-  footerText: {
-    color: 'rgba(255, 255, 255, 0.35)',
-    fontSize: 13,
-    fontWeight: '400',
-    textAlign: 'center',
   },
 });

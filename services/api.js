@@ -2,9 +2,9 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 
-                process.env.EXPO_PUBLIC_API_URL || 
-                'http://localhost:8080/api/v1';
+const API_URL = Constants.expoConfig?.extra?.apiUrl ||
+                process.env.EXPO_PUBLIC_API_URL ||
+                'https://api.pullevents.com/api/v1';
 
 // API URL configured - logs removed for production security
 

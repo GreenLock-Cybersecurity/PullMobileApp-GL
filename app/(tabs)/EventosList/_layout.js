@@ -30,6 +30,18 @@ export default function EventosLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="EventoEditar"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="TicketsGestion"
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   blurContainer: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.03)',
-    backgroundColor: 'rgba(5, 5, 10, 0.8)',
+    backgroundColor: 'rgba(6, 6, 10, 0.65)',
   },
   tabBar: {
     flexDirection: 'row',

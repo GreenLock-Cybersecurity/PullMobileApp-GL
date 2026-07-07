@@ -1,4 +1,4 @@
-// app/(tabs)/EmpleadosList/index.js - Employees List with Expandable Cards
+// app/(tabs)/EmpleadosList/index.js - Clean Modern Team View
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   Alert,
   SafeAreaView,
   ActivityIndicator,
-  ImageBackground,
   StyleSheet,
   ScrollView,
   Animated,
@@ -20,6 +19,7 @@ import { useDataStore } from '@/store/useDataStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import CustomHeader from '@/components/CustomHeader';
+import BackgroundGlow from '@/components/BackgroundGlow';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 
@@ -28,30 +28,27 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Role configuration - handles both "admin"/"administrador" variants
+// Role configuration
 const ROLE_CONFIG = {
   admin: {
     label: 'Administrators',
-    icon: 'shield-checkmark',
-    colors: ['rgba(255, 215, 0, 0.8)', 'rgba(255, 165, 0, 0.8)'],
-    borderColor: 'rgba(255, 215, 0, 0.4)',
-    textColor: '#FFD700',
+    icon: 'key',
+    color: 'rgb(59, 130, 246)',
+    bgColor: 'rgba(59, 130, 246, 0.12)',
     order: 1,
   },
   administrador: {
     label: 'Administrators',
-    icon: 'shield-checkmark',
-    colors: ['rgba(255, 215, 0, 0.8)', 'rgba(255, 165, 0, 0.8)'],
-    borderColor: 'rgba(255, 215, 0, 0.4)',
-    textColor: '#FFD700',
+    icon: 'key',
+    color: 'rgb(59, 130, 246)',
+    bgColor: 'rgba(59, 130, 246, 0.12)',
     order: 1,
   },
   staff: {
     label: 'Staff',
     icon: 'people',
-    colors: ['rgba(139, 92, 246, 0.8)', 'rgba(217, 70, 239, 0.8)'],
-    borderColor: 'rgba(139, 92, 246, 0.4)',
-    textColor: '#a78bfa',
+    color: 'rgb(168, 85, 255)',
+    bgColor: 'rgba(168, 85, 255, 0.12)',
     order: 2,
   },
 };
@@ -62,7 +59,7 @@ const animConfig = {
   update: { type: LayoutAnimation.Types.easeInEaseOut },
 };
 
-// Role Section Component - Simple expandable without tree
+// Role Section Component
 function RoleSection({ role, employees, isExpanded, onToggle, onEmployeePress, isAdmin }) {
   const rotateAnim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
   const config = ROLE_CONFIG[role.toLowerCase()] || ROLE_CONFIG.staff;
@@ -92,76 +89,55 @@ function RoleSection({ role, employees, isExpanded, onToggle, onEmployeePress, i
 
   return (
     <View style={styles.roleSectionContainer}>
-      {/* Role Header */}
-      <TouchableOpacity onPress={handleToggle} activeOpacity={0.8}>
-        <BlurView intensity={60} tint="dark" style={styles.roleHeader}>
-          <LinearGradient
-            colors={['rgba(139, 92, 246, 0.05)', 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.roleHeaderInner}>
-            <View style={[styles.roleAccent, { backgroundColor: config.textColor }]} />
+      {/* Role Header - Clean minimal style */}
+      <TouchableOpacity onPress={handleToggle} activeOpacity={0.7} style={styles.roleHeader}>
+        <View style={[styles.roleIconCircle, { backgroundColor: config.bgColor }]}>
+          <Ionicons name={config.icon} size={18} color={config.color} />
+        </View>
 
-            <LinearGradient colors={config.colors} style={styles.roleIconBg}>
-              <Ionicons name={config.icon} size={22} color="white" />
-            </LinearGradient>
+        <View style={styles.roleInfo}>
+          <Text style={[styles.roleLabel, { color: config.color }]}>{config.label}</Text>
+          <Text style={styles.roleCount}>{employees.length} {employees.length === 1 ? 'member' : 'members'}</Text>
+        </View>
 
-            <View style={styles.roleInfo}>
-              <Text style={[styles.roleLabel, { color: config.textColor }]}>{config.label}</Text>
-              <Text style={styles.roleCount}>{employees.length} {employees.length === 1 ? 'member' : 'members'}</Text>
-            </View>
-
-            <Animated.View style={{ transform: [{ rotate }] }}>
-              <Ionicons name="chevron-forward" size={20} color={config.textColor} />
-            </Animated.View>
-          </View>
-        </BlurView>
+        <Animated.View style={{ transform: [{ rotate }] }}>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.4)" />
+        </Animated.View>
       </TouchableOpacity>
 
-      {/* Employees - Simple cards without tree */}
+      {/* Employee List */}
       {isExpanded && employees.length > 0 && (
         <View style={styles.employeesContainer}>
-          {employees.map((employee) => (
+          {employees.map((employee, index) => (
             <TouchableOpacity
               key={employee.id}
               onPress={() => onEmployeePress(employee)}
               disabled={!isAdmin}
-              activeOpacity={0.8}
-              style={styles.employeeCardTouch}
+              activeOpacity={0.7}
             >
-              <BlurView intensity={50} tint="dark" style={styles.employeeCard}>
-                <LinearGradient
-                  colors={['rgba(139, 92, 246, 0.03)', 'transparent']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.employeeCardInner}>
-                  <LinearGradient colors={config.colors} style={styles.employeeAvatar}>
-                    <Text style={styles.avatarText}>
-                      {employee.firstName?.charAt(0) || ''}{employee.lastName?.charAt(0) || ''}
-                    </Text>
-                  </LinearGradient>
-
-                  <View style={styles.employeeInfo}>
-                    <Text style={styles.employeeName} numberOfLines={1}>
-                      {employee.firstName} {employee.lastName}
-                    </Text>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="mail-outline" size={12} color="rgba(255,255,255,0.5)" />
-                      <Text style={styles.detailText} numberOfLines={1}>{employee.email || 'No email'}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.5)" />
-                      <Text style={styles.detailText}>{formatDate(employee.createdAt)}</Text>
-                    </View>
-                  </View>
-
-                  {isAdmin && <Ionicons name="ellipsis-vertical" size={18} color="rgba(167, 139, 250, 0.6)" />}
+              <View style={[
+                styles.employeeRow,
+                index === employees.length - 1 && styles.employeeRowLast
+              ]}>
+                <View style={[styles.employeeAvatar, { backgroundColor: config.bgColor }]}>
+                  <Text style={[styles.avatarText, { color: config.color }]}>
+                    {employee.firstName?.charAt(0) || ''}{employee.lastName?.charAt(0) || ''}
+                  </Text>
                 </View>
-              </BlurView>
+
+                <View style={styles.employeeInfo}>
+                  <Text style={styles.employeeName} numberOfLines={1}>
+                    {employee.firstName} {employee.lastName}
+                  </Text>
+                  <Text style={styles.employeeEmail} numberOfLines={1}>
+                    {employee.email || 'No email'}
+                  </Text>
+                </View>
+
+                {isAdmin && (
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
+                )}
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -175,8 +151,8 @@ export default function EmpleadosList() {
   const { employees, isLoadingEmployees, employeesError, fetchEmployees } = useDataStore();
   const user = useAuthStore((state) => state.user);
   const [expandedRoles, setExpandedRoles] = useState({ admin: true, administrador: true, staff: true });
+  const scrollY = useRef(new Animated.Value(0)).current;
 
-  // Refetch employees when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchEmployees();
@@ -188,14 +164,9 @@ export default function EmpleadosList() {
   const handleEmployeePress = (employee) => {
     if (!['admin', 'administrador'].includes(user?.role?.toLowerCase())) return;
 
-    // Don't allow editing/deleting admins
     const employeeRole = (employee.role || '').toLowerCase();
     if (['admin', 'administrador'].includes(employeeRole)) {
-      Alert.alert(
-        'Action Not Allowed',
-        'Admin employees cannot be edited or deleted.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Action Not Allowed', 'Admin employees cannot be edited or deleted.', [{ text: 'OK' }]);
       return;
     }
 
@@ -234,139 +205,105 @@ export default function EmpleadosList() {
 
   const sortedRoles = Object.keys(groupedEmployees).sort((a, b) => (ROLE_CONFIG[a]?.order || 99) - (ROLE_CONFIG[b]?.order || 99));
   const totalEmployees = employees.length;
+  const adminCount = (groupedEmployees.admin?.length || 0) + (groupedEmployees.administrador?.length || 0);
+  const staffCount = groupedEmployees.staff?.length || 0;
   const isAdmin = ['admin', 'administrador'].includes(user?.role?.toLowerCase());
 
   if (isLoadingEmployees) {
     return (
-      <ImageBackground source={require('../../../assets/fondo.webp')} style={styles.background} blurRadius={15}>
-        <View style={styles.overlay} />
+      <BackgroundGlow>
         <CustomHeader title="Team" />
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="rgba(139, 92, 246, 0.9)" />
+            <ActivityIndicator size="large" color="rgb(168, 85, 255)" />
             <Text style={styles.loadingText}>Loading team...</Text>
           </View>
         </SafeAreaView>
-      </ImageBackground>
+      </BackgroundGlow>
     );
   }
 
   if (employeesError) {
     return (
-      <ImageBackground source={require('../../../assets/fondo.webp')} style={styles.background} blurRadius={15}>
-        <View style={styles.overlay} />
+      <BackgroundGlow>
         <CustomHeader title="Team" />
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.centerContainer}>
-            <Ionicons name="alert-circle" size={56} color="rgba(239, 68, 68, 0.8)" />
+            <Ionicons name="alert-circle" size={48} color="rgba(239, 68, 68, 0.8)" />
             <Text style={styles.errorText}>{employeesError}</Text>
-            <TouchableOpacity onPress={fetchEmployees} activeOpacity={0.8} style={{ marginTop: 16 }}>
-              <BlurView intensity={50} tint="dark" style={styles.retryBtn}>
-                <View style={styles.retryBtnInner}>
-                  <Ionicons name="refresh" size={18} color="#a78bfa" />
-                  <Text style={styles.retryBtnText}>Retry</Text>
-                </View>
-              </BlurView>
+            <TouchableOpacity onPress={fetchEmployees} activeOpacity={0.7} style={styles.retryBtn}>
+              <Text style={styles.retryBtnText}>Try Again</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
-      </ImageBackground>
+      </BackgroundGlow>
     );
   }
 
   return (
-    <ImageBackground source={require('../../../assets/fondo.webp')} style={styles.background} blurRadius={15}>
-      <View style={styles.overlay} />
-      <CustomHeader title="Team" />
+    <BackgroundGlow>
+      <CustomHeader title="Team" scrollY={scrollY} enableBlurOnScroll />
 
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.container}>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* Stats Card */}
-            <BlurView intensity={60} tint="dark" style={styles.statsCard}>
-              <LinearGradient
-                colors={['rgba(139, 92, 246, 0.05)', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.statsCardInner}>
-                <View style={styles.statsRow}>
-                  <View style={styles.statItem}>
-                    <View style={styles.statIconWrapper}>
-                      <BlurView intensity={80} tint="dark" style={styles.statIconBlur}>
-                        <LinearGradient
-                          colors={['rgba(139, 92, 246, 0.15)', 'rgba(139, 92, 246, 0.05)']}
-                          style={styles.statIconGradient}
-                        >
-                          <Ionicons name="people" size={22} color="#a78bfa" />
-                        </LinearGradient>
-                      </BlurView>
-                    </View>
-                    <Text style={styles.statValue}>{totalEmployees}</Text>
-                    <Text style={styles.statLabel}>Total</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <View style={styles.statIconWrapper}>
-                      <BlurView intensity={80} tint="dark" style={styles.statIconBlur}>
-                        <LinearGradient
-                          colors={['rgba(255, 215, 0, 0.15)', 'rgba(255, 215, 0, 0.05)']}
-                          style={styles.statIconGradient}
-                        >
-                          <Ionicons name="shield-checkmark" size={22} color="#FFD700" />
-                        </LinearGradient>
-                      </BlurView>
-                    </View>
-                    <Text style={styles.statValue}>{(groupedEmployees.admin?.length || 0) + (groupedEmployees.administrador?.length || 0)}</Text>
-                    <Text style={styles.statLabel}>Admins</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <View style={styles.statIconWrapper}>
-                      <BlurView intensity={80} tint="dark" style={styles.statIconBlur}>
-                        <LinearGradient
-                          colors={['rgba(139, 92, 246, 0.15)', 'rgba(139, 92, 246, 0.05)']}
-                          style={styles.statIconGradient}
-                        >
-                          <Ionicons name="person" size={22} color="#a78bfa" />
-                        </LinearGradient>
-                      </BlurView>
-                    </View>
-                    <Text style={styles.statValue}>{groupedEmployees.staff?.length || 0}</Text>
-                    <Text style={styles.statLabel}>Staff</Text>
-                  </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+            scrollEventThrottle={16}
+          >
+            {/* Stats Row - Icons centered on top */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <View style={styles.statIconCircle}>
+                  <Ionicons name="people" size={22} color="rgb(168, 85, 255)" />
                 </View>
+                <Text style={styles.statValue}>{totalEmployees}</Text>
+                <Text style={styles.statLabel}>Total</Text>
               </View>
-            </BlurView>
 
-            {/* Add Button - Glass Morphism */}
+              <View style={styles.statItem}>
+                <View style={[styles.statIconCircle, styles.statIconCircleBlue]}>
+                  <Ionicons name="key" size={20} color="rgb(59, 130, 246)" />
+                </View>
+                <Text style={styles.statValue}>{adminCount}</Text>
+                <Text style={styles.statLabel}>Admins</Text>
+              </View>
+
+              <View style={styles.statItem}>
+                <View style={styles.statIconCircle}>
+                  <Ionicons name="person" size={22} color="rgb(168, 85, 255)" />
+                </View>
+                <Text style={styles.statValue}>{staffCount}</Text>
+                <Text style={styles.statLabel}>Staff</Text>
+              </View>
+            </View>
+
+            {/* Add Button */}
             {isAdmin && (
-              <TouchableOpacity onPress={() => router.push('/(tabs)/EmpleadosList/EmpleadoNuevo')} activeOpacity={0.8}>
-                <BlurView intensity={60} tint="dark" style={styles.addBtn}>
-                  <LinearGradient
-                    colors={['rgba(139, 92, 246, 0.15)', 'rgba(217, 70, 239, 0.15)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/EmpleadosList/EmpleadoNuevo')}
+                activeOpacity={0.8}
+                style={styles.addBtn}
+              >
+                <BlurView intensity={60} tint="dark" style={styles.addBtnBlur}>
                   <View style={styles.addBtnInner}>
-                    <Ionicons name="person-add" size={20} color="#a78bfa" />
+                    <Ionicons name="person-add" size={18} color="white" />
                     <Text style={styles.addBtnText}>Add Member</Text>
                   </View>
                 </BlurView>
               </TouchableOpacity>
             )}
 
-            {/* Sections */}
+            {/* Team Members */}
             <Text style={styles.sectionTitle}>Team Members</Text>
 
             {sortedRoles.length === 0 ? (
-              <BlurView intensity={50} tint="dark" style={styles.emptyCard}>
-                <View style={styles.emptyCardInner}>
-                  <Ionicons name="people-outline" size={48} color="rgba(255, 255, 255, 0.3)" />
-                  <Text style={styles.emptyText}>No members</Text>
-                  {isAdmin && <Text style={styles.emptySubtext}>Tap "Add Member" to get started</Text>}
-                </View>
-              </BlurView>
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={40} color="rgba(255, 255, 255, 0.25)" />
+                <Text style={styles.emptyText}>No team members yet</Text>
+                {isAdmin && <Text style={styles.emptySubtext}>Add your first member above</Text>}
+              </View>
             ) : (
               sortedRoles.map((role) => (
                 <RoleSection
@@ -383,119 +320,219 @@ export default function EmpleadosList() {
           </ScrollView>
         </View>
       </SafeAreaView>
-    </ImageBackground>
+    </BackgroundGlow>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, backgroundColor: '#0a0a0f' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.75)' },
-  container: { flex: 1, paddingTop: 70, paddingHorizontal: 16 },
-  scrollContent: { paddingBottom: 100 },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  loadingText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 15, marginTop: 16 },
-  errorText: { color: 'rgba(239, 68, 68, 0.9)', fontSize: 16, marginTop: 16, textAlign: 'center' },
+  container: {
+    flex: 1,
+    paddingTop: 70,
+    paddingHorizontal: 20,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 15,
+    marginTop: 16,
+    fontWeight: '400',
+  },
+  errorText: {
+    color: 'rgba(239, 68, 68, 0.9)',
+    fontSize: 15,
+    marginTop: 16,
+    textAlign: 'center',
+    fontWeight: '400',
+  },
+  retryBtn: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    backgroundColor: 'rgba(168, 85, 255, 0.15)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 255, 0.3)',
+  },
+  retryBtnText: {
+    color: 'rgb(168, 85, 255)',
+    fontSize: 15,
+    fontWeight: '500',
+  },
 
-  retryBtn: { borderRadius: 12, overflow: 'hidden' },
-  retryBtnInner: {
+  // Stats Row - Icons on top
+  statsRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-around',
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+    marginBottom: 12,
+  },
+  statItem: {
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
-    borderRadius: 12,
   },
-  retryBtnText: { color: '#a78bfa', fontSize: 15, fontWeight: '500' },
-
-  // Stats Card
-  statsCard: { borderRadius: 16, overflow: 'hidden', marginBottom: 16 },
-  statsCardInner: {
-    backgroundColor: 'rgba(15, 15, 21, 0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    padding: 20,
+  statIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(168, 85, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  statItem: { alignItems: 'center' },
-  statIconWrapper: { marginBottom: 8, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
-  statIconBlur: { borderRadius: 14, overflow: 'hidden' },
-  statIconGradient: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  statValue: { color: 'white', fontSize: 22, fontWeight: '700' },
-  statLabel: { color: 'rgba(255, 255, 255, 0.5)', fontSize: 12, marginTop: 2 },
+  statIconCircleBlue: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  },
+  statValue: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
 
   // Add Button
-  addBtn: { borderRadius: 14, overflow: 'hidden', marginBottom: 20 },
+  addBtn: {
+    marginBottom: 28,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  addBtnBlur: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   addBtnInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    paddingVertical: 14,
+    backgroundColor: 'rgba(168, 85, 255, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
-    borderRadius: 14,
+    borderColor: 'rgba(168, 85, 255, 0.4)',
+    borderRadius: 12,
   },
-  addBtnText: { color: '#a78bfa', fontSize: 16, fontWeight: '600' },
+  addBtnText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 
-  sectionTitle: { color: 'white', fontSize: 18, fontWeight: '600', marginBottom: 16 },
+  sectionTitle: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 13,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 16,
+  },
 
   // Role Section
-  roleSectionContainer: { marginBottom: 16 },
-  roleHeader: { borderRadius: 16, overflow: 'hidden' },
-  roleHeaderInner: {
+  roleSectionContainer: {
+    marginBottom: 20,
+  },
+  roleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 15, 21, 0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    padding: 14,
-    paddingLeft: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-  roleAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
-  roleIconBg: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  roleInfo: { flex: 1 },
-  roleLabel: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  roleCount: { color: 'rgba(255, 255, 255, 0.5)', fontSize: 13 },
+  roleIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  roleInfo: {
+    flex: 1,
+  },
+  roleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  roleCount: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    fontWeight: '400',
+  },
 
-  // Employees Container (no tree)
-  employeesContainer: { marginTop: 10, gap: 10 },
-
-  // Employee Card
-  employeeCardTouch: {},
-  employeeCard: { borderRadius: 14, overflow: 'hidden' },
-  employeeCardInner: {
+  // Employees
+  employeesContainer: {
+    marginTop: 4,
+    marginLeft: 18,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255, 255, 255, 0.06)',
+    paddingLeft: 18,
+  },
+  employeeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 15, 21, 0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
-    padding: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
   },
-  employeeAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  avatarText: { color: 'white', fontSize: 15, fontWeight: '700' },
-  employeeInfo: { flex: 1 },
-  employeeName: { color: 'white', fontSize: 15, fontWeight: '600', marginBottom: 4 },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  detailText: { color: 'rgba(255, 255, 255, 0.5)', fontSize: 12, flex: 1 },
+  employeeRowLast: {
+    borderBottomWidth: 0,
+  },
+  employeeAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  employeeInfo: {
+    flex: 1,
+  },
+  employeeName: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  employeeEmail: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    fontWeight: '400',
+  },
 
   // Empty State
-  emptyCard: { borderRadius: 16, overflow: 'hidden' },
-  emptyCardInner: {
-    backgroundColor: 'rgba(15, 15, 21, 0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    paddingVertical: 40,
-    paddingHorizontal: 24,
+  emptyContainer: {
     alignItems: 'center',
+    paddingVertical: 48,
   },
-  emptyText: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 15, marginTop: 12 },
-  emptySubtext: { color: 'rgba(255, 255, 255, 0.4)', fontSize: 13, marginTop: 6 },
+  emptyText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 15,
+    fontWeight: '400',
+    marginTop: 12,
+  },
+  emptySubtext: {
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 4,
+  },
 });

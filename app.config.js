@@ -1,7 +1,7 @@
 // app.config.js
 export default {
   expo: {
-    name: "Pull Events Staff",
+    name: "Pull Events",
     slug: "pull-events-staff",
     version: "1.0.0",
     scheme: "pullevents",
@@ -16,6 +16,7 @@ export default {
     plugins: [
       "expo-router",
       "expo-secure-store",
+      "expo-web-browser",
       [
         "expo-camera",
         {
@@ -36,7 +37,7 @@ export default {
       ]
     ],
     extra: {
-      apiUrl: process.env.EXPO_PUBLIC_API_URL,
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://api.pullevents.com/api/v1",
       eas: {
         projectId: "cc92c30d-3724-45c7-913f-6774f3a1ebfb"
       }

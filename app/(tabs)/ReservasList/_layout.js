@@ -37,6 +37,24 @@ export default function ReservasLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="GuestListDetalle"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="VIPListNuevo"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="VIPListDetalle"
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

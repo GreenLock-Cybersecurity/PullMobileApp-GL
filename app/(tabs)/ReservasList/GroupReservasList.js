@@ -1,5 +1,5 @@
 // app/(tabs)/ReservasList/GroupReservasList.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
   ImageBackground,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,10 +19,12 @@ import { groupReservationService } from '@/services/groupReservationService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import CustomHeader from '@/components/CustomHeader';
+import BackgroundGlow from '@/components/BackgroundGlow';
 
 export default function GroupReservasList() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const [reservations, setReservations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,13 +195,8 @@ export default function GroupReservasList() {
   );
 
   return (
-    <ImageBackground
-      source={require('../../../assets/fondo.webp')}
-      style={styles.background}
-      blurRadius={15}
-    >
-      <View style={styles.overlay} />
-      <CustomHeader title="Group Reservations" />
+    <BackgroundGlow>
+      <CustomHeader title="Group Reservations" scrollY={scrollY} enableBlurOnScroll />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={{ flex: 1, paddingTop: 50 }}>
           {/* Status Filters */}
@@ -249,6 +247,8 @@ export default function GroupReservasList() {
                 keyExtractor={(item) => item.id?.toString() || item.reservation_id}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 20 }}
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+                scrollEventThrottle={16}
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}
@@ -262,7 +262,7 @@ export default function GroupReservasList() {
           </View>
         </View>
       </SafeAreaView>
-    </ImageBackground>
+    </BackgroundGlow>
   );
 }
 

@@ -6,16 +6,21 @@ import { employeeService } from '@/services/employeeService';
 import { orderService } from '@/services/orderService';
 import { groupReservationService } from '@/services/groupReservationService';
 
+// Cache duration: 5 minutes (300000ms)
+const CACHE_DURATION = 300000;
+
 export const useDataStore = create((set, get) => ({
   // Venue info
   venueInfo: null,
   isLoadingVenue: false,
   venueError: null,
+  venueInfoLoadedAt: 0, // Cache timestamp
 
   // Events
   events: [],
   isLoadingEvents: false,
   eventsError: null,
+  eventsLoadedAt: 0, // Cache timestamp
   currentEvent: null,
   isLoadingEventDetail: false,
   eventDetailError: null,
@@ -46,7 +51,7 @@ export const useDataStore = create((set, get) => ({
   currentOrder: null,
   isLoadingOrderDetail: false,
   orderDetailError: null,
-  venueCurrency: 'EUR', // AÑADIDO
+  venueCurrency: 'GTQ', // Default GTQ for Guatemala
 
   // Search
   searchResults: [],
@@ -58,10 +63,19 @@ export const useDataStore = create((set, get) => ({
   pendingGroupCount: 0,
 
   // ==================== VENUE METHODS ====================
-  fetchVenueInfo: async (venueId) => {
+  // OPTIMIZED: Added caching to avoid redundant API calls
+  fetchVenueInfo: async (venueId, forceReload = false) => {
     if (!venueId) {
       set({ venueError: 'Venue ID is required' });
       return;
+    }
+
+    const { venueInfo, venueInfoLoadedAt } = get();
+    const now = Date.now();
+
+    // Return cached data if fresh and not forcing reload
+    if (!forceReload && venueInfo && venueInfoLoadedAt && (now - venueInfoLoadedAt < CACHE_DURATION)) {
+      return; // Data is still fresh, skip reload
     }
 
     set({ isLoadingVenue: true, venueError: null });
@@ -74,6 +88,7 @@ export const useDataStore = create((set, get) => ({
           venueInfo: result.data,
           isLoadingVenue: false,
           venueError: null,
+          venueInfoLoadedAt: now, // Update cache timestamp
         });
       } else {
         set({
@@ -100,10 +115,19 @@ export const useDataStore = create((set, get) => ({
   },
 
   // ==================== EVENTS METHODS ====================
-  fetchUpcomingEvents: async (venueId) => {
+  // OPTIMIZED: Added caching to avoid redundant API calls
+  fetchUpcomingEvents: async (venueId, forceReload = false) => {
     if (!venueId) {
       set({ eventsError: 'Venue ID is required' });
       return;
+    }
+
+    const { events, eventsLoadedAt } = get();
+    const now = Date.now();
+
+    // Return cached data if fresh and not forcing reload
+    if (!forceReload && events.length > 0 && eventsLoadedAt && (now - eventsLoadedAt < CACHE_DURATION)) {
+      return; // Data is still fresh, skip reload
     }
 
     set({ isLoadingEvents: true, eventsError: null });
@@ -134,6 +158,7 @@ export const useDataStore = create((set, get) => ({
           events: mappedEvents,
           isLoadingEvents: false,
           eventsError: null,
+          eventsLoadedAt: now, // Update cache timestamp
         });
       } else {
         set({
@@ -414,7 +439,7 @@ export const useDataStore = create((set, get) => ({
           isLoadingOrders: false,
           ordersError: null,
           currentOrderFilter: status,
-          venueCurrency: result.currency || 'EUR', // AÑADIDO
+          venueCurrency: result.currency || 'GTQ',
         });
       } else {
         set({
@@ -463,7 +488,7 @@ export const useDataStore = create((set, get) => ({
         limit: 10,
       },
       currentOrderFilter: 'pending_staff_approval',
-      venueCurrency: 'EUR',
+      venueCurrency: 'GTQ',
     });
   },
 
@@ -531,7 +556,7 @@ export const useDataStore = create((set, get) => ({
           ordersPagination: result.pagination,
           isSearching: false,
           searchError: null,
-          venueCurrency: result.currency || 'EUR',
+          venueCurrency: result.currency || 'GTQ',
         });
       } else {
         set({

@@ -20,9 +20,7 @@ export const useAuthStore = create((set, get) => ({
       if (result.success) {
         const { user, token } = result.data;
 
-        await secureStorage.setToken(token);
-        await secureStorage.setUser(user);
-
+        // Update state immediately for instant UI response
         set({
           user,
           token,
@@ -31,16 +29,24 @@ export const useAuthStore = create((set, get) => ({
           error: null,
         });
 
-        try {
-          const pushToken = await notificationService.registerForPushNotifications();
-          if (pushToken && user.venue_id_real && user.employee_id_real) {
-            await notificationService.registerTokenWithBackend(
-              user.venue_id_real,
-              user.employee_id_real
-            );
-          }
-        } catch {
-        }
+        // Storage and notifications in background - don't block login
+        Promise.all([
+          secureStorage.setToken(token),
+          secureStorage.setUser(user),
+        ]).catch(() => {});
+
+        // Push notifications completely in background
+        (async () => {
+          try {
+            const pushToken = await notificationService.registerForPushNotifications();
+            if (pushToken && user.venue_id_real && user.employee_id_real) {
+              notificationService.registerTokenWithBackend(
+                user.venue_id_real,
+                user.employee_id_real
+              );
+            }
+          } catch {}
+        })();
 
         return { success: true };
       } else {
@@ -103,6 +109,21 @@ export const useAuthStore = create((set, get) => ({
             isAuthenticated: true,
             isInitialized: true,
           });
+
+          // Refresh staff token in background each time app is opened
+          // This extends the session for another week
+          (async () => {
+            try {
+              const refreshResult = await authService.refreshStaffToken();
+              if (refreshResult.success && refreshResult.data?.token) {
+                const newToken = refreshResult.data.token;
+                await secureStorage.setToken(newToken);
+                set({ token: newToken });
+              }
+            } catch {
+              // Silent fail - session is still valid from verify
+            }
+          })();
         } else {
           await secureStorage.clearAll();
           set({
