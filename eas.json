@@ -26,6 +26,13 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6756277620",
+        "ascApiKeyPath": "/Users/diego/Documents/Pull/AuthKey_TNNJK4FBQH.p8",
+        "ascApiKeyId": "TNNJK4FBQH",
+        "ascApiKeyIssuerId": "d2969b04-8b16-4e5f-b113-2e917370b88c"
+      }
+    }
   }
 }

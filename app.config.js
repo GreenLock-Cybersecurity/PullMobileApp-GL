@@ -3,7 +3,7 @@ export default {
   expo: {
     name: "Pull Events",
     slug: "pull-events-staff",
-    version: "1.0.0",
+    version: "1.1.0",
     scheme: "pullevents",
     orientation: "portrait",
     userInterfaceStyle: "dark",
