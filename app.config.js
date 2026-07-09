@@ -39,7 +39,11 @@ export default {
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://api.pullevents.com/api/v1",
       eas: {
-        projectId: "cc92c30d-3724-45c7-913f-6774f3a1ebfb"
+        // Proyecto EAS re-creado bajo la cuenta corporativa diego-gl
+        // (2026-07-09). El proyecto original cc92c30d-... quedó en una
+        // cuenta de Expo inaccesible; TestFlight no se ve afectado (manda
+        // el bundle id en App Store Connect).
+        projectId: "b7de73de-11ef-4545-9bfd-f3bde2e66e8c",
       }
     },
     ios: {
