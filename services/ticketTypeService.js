@@ -2,7 +2,11 @@ import { apiClient } from './api';
 
 export const getTicketTypesByEvent = async (eventId) => {
   const response = await apiClient.get(`/ticket-types/event/${eventId}`);
-  return response.data;
+  // Same wrapper shape as guestListService: callers read `.data`.
+  return {
+    success: true,
+    data: Array.isArray(response.data) ? response.data : [],
+  };
 };
 
 export const createTicketType = async (eventId, ticketData) => {

@@ -8,6 +8,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Image } from 'expo-image';
 import { notificationService } from '@/services/notificationService';
 import '@/global.css';
+import '@/utils/webAlert';
 
 const preloadCriticalImages = async () => {
   try {

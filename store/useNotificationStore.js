@@ -5,6 +5,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DISMISSED_KEY = '@pull_dismissed_notifications';
 
+const POLL_INTERVAL_MS = 30000;
+// Ignore duplicate fetches fired within this window (e.g. several screens
+// mounting their headers at once).
+const FETCH_THROTTLE_MS = 10000;
+
+// Module-level so there is exactly ONE poller app-wide, no matter how many
+// screens (each with its own header bell) are mounted in the navigation stack.
+let pollTimer = null;
+let pollVenueId = null;
+
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
   isLoading: false,
@@ -39,10 +49,39 @@ export const useNotificationStore = create((set, get) => ({
     }
   },
 
-  fetchNotifications: async (venueId) => {
+  // Start (or reuse) the single global notification poller for a venue.
+  startPolling: (venueId) => {
+    if (!venueId) return;
+    if (pollTimer && pollVenueId === venueId) {
+      // Already polling this venue — just refresh if data is stale.
+      get().fetchNotifications(venueId);
+      return;
+    }
+    if (pollTimer) clearInterval(pollTimer);
+    pollVenueId = venueId;
+    get().fetchNotifications(venueId);
+    pollTimer = setInterval(() => {
+      get().fetchNotifications(venueId, { force: true });
+    }, POLL_INTERVAL_MS);
+  },
+
+  stopPolling: () => {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    pollVenueId = null;
+  },
+
+  fetchNotifications: async (venueId, { force = false } = {}) => {
     if (!venueId) return;
 
-    set({ isLoading: true, error: null });
+    // Collapse bursts: multiple headers mount at once during navigation and
+    // each asks for a refresh — only the first within the window hits the API.
+    const { lastFetchTime, isLoading } = get();
+    if (!force && (isLoading || (lastFetchTime && Date.now() - lastFetchTime < FETCH_THROTTLE_MS))) {
+      return;
+    }
+
+    set({ isLoading: true, error: null, lastFetchTime: Date.now() });
 
     try {
       const individualResult = await orderService.getOrders(venueId, {

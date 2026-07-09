@@ -955,7 +955,7 @@ export default function EventoDetalle() {
                       <View key={ticket.id || index} style={[styles.ticketItem, styles.ticketItemIndividual, isSoldOut && styles.ticketItemSoldOut]}>
                         <View style={styles.ticketHeader}>
                           <Text style={styles.ticketName}>{ticket.name}</Text>
-                          {useVipListFlow && hasGenderPricing ? (
+                          {hasGenderPricing ? (
                             <Text style={styles.genderPrice}>
                               M: {currencySymbol}{malePrice.toFixed(2)} / F: {currencySymbol}{femalePrice.toFixed(2)}
                             </Text>
@@ -1024,7 +1024,7 @@ export default function EventoDetalle() {
                     <View key={ticket.id || index} style={[styles.ticketItem, styles.ticketItemGroup, isSoldOut && styles.ticketItemSoldOut]}>
                       <View style={styles.ticketHeader}>
                         <Text style={styles.ticketName}>{ticket.name}</Text>
-                        {useVipListFlow && hasGenderPricing ? (
+                        {hasGenderPricing ? (
                           <Text style={styles.genderPrice}>
                             M: {currencySymbol}{malePrice.toFixed(2)} / F: {currencySymbol}{femalePrice.toFixed(2)}
                           </Text>

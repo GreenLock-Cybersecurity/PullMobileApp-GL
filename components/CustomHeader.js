@@ -15,7 +15,7 @@ const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1467.12 90
 
 // Notification Bell Component - Simple with red dot
 function NotificationBell() {
-  const { unreadCount, toggleDropdown, fetchNotifications, loadDismissedIds } = useNotificationStore();
+  const { unreadCount, toggleDropdown, startPolling, loadDismissedIds } = useNotificationStore();
   const { user } = useAuthStore();
 
   // Load dismissed IDs on mount
@@ -23,15 +23,12 @@ function NotificationBell() {
     loadDismissedIds();
   }, []);
 
-  // Fetch notifications when user is available
+  // The store keeps a single app-wide poller; mounting another header just
+  // reuses it (a stale-guarded refresh at most), so stacked screens don't
+  // multiply the request rate.
   useEffect(() => {
     if (user?.venue_id_real) {
-      fetchNotifications(user.venue_id_real);
-      // Polling every 30 seconds
-      const interval = setInterval(() => {
-        fetchNotifications(user.venue_id_real);
-      }, 30000);
-      return () => clearInterval(interval);
+      startPolling(user.venue_id_real);
     }
   }, [user?.venue_id_real]);
 

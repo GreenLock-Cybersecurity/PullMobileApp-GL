@@ -44,9 +44,11 @@ export const guestListService = {
     try {
       const response = await apiClient.get(`/guest-lists/venue/${venueId}/pending`);
 
+      // Backend wraps as {success, data, pagination}; normalize to an array.
+      const body = response.data;
       return {
         success: true,
-        data: response.data || [],
+        data: Array.isArray(body) ? body : body?.data || [],
       };
     } catch (error) {
       return {

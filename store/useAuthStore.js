@@ -80,6 +80,14 @@ export const useAuthStore = create((set, get) => ({
     } catch {
     }
 
+    // Stop the global staff-notification poller so it doesn't keep hitting
+    // the API with a cleared token.
+    try {
+      const { useNotificationStore } = require('./useNotificationStore');
+      useNotificationStore.getState().stopPolling();
+    } catch {
+    }
+
     authService.logout();
 
     await secureStorage.clearAll();

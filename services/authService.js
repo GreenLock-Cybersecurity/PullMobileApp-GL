@@ -27,6 +27,9 @@ export const authService = {
             venue_id_real: decodedToken.venue_id,
             organization_id_real: decodedToken.organization_id,
             employee_id_real: decodedToken.employee_id,
+            // VIP list flow retirado (2026-07): forzado a false en ambos
+            // paths (login y verify-token).
+            use_vip_list_flow: false,
           },
           token,
         },
@@ -66,6 +69,7 @@ export const authService = {
           success: true,
           data: {
             id: claims.employee_id,
+            name: claims.name,
             email: claims.email,
             role: claims.role,
             venue_id: claims.venue_id,
@@ -76,7 +80,9 @@ export const authService = {
             venue_name: claims.venue_name,
             venue_slug: claims.venue_slug,
             venue_currency: claims.venue_currency,
-            use_vip_list_flow: claims.use_vip_list_flow,
+            // VIP list flow retirado (2026-07): se ignora el claim para que una
+          // config de venue obsoleta no devuelva la app al modo VIP antiguo.
+          use_vip_list_flow: false,
           },
         };
       }
